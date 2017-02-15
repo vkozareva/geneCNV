@@ -57,6 +57,9 @@ local_settings.py
 instance/
 .webassets-cache
 
+# OS X stuff
+.DS_Store
+
 # Scrapy stuff:
 .scrapy
 
@@ -87,3 +90,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# Configuration files
+conf/*.ini
