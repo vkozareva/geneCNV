@@ -24,6 +24,10 @@ class coverageMatrix(object):
         else:
             flow_cell_id, lane = flow_cell_lane.rsplit('-', 1)
 
+        # simulated CNV subjects have one of these suffixes in this field
+        if 'del' in RG['SM'] or 'dup' in RG['SM']:
+            subject = RG['SM']
+
         gender = subject[0]
         if specimen_sample.startswith(('ACGT', 'Omega')):
             lab, specimen_num, sequencer, sample = specimen_sample.split('.')
