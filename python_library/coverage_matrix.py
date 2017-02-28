@@ -46,7 +46,7 @@ class coverageMatrix(object):
         sample_info = [full_id, subject, specimen, sample, gender, sequencer, flow_cell_id, lane, bwa_version, date_modified, is_re86]
         return sample_info
 
-    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, root=None):
+    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, add_coding_cols, root=None):
         """ Create matrix of exon coverage for any given subject """
 
         date_modified = os.path.getmtime(bamfile_path)
@@ -63,7 +63,8 @@ class coverageMatrix(object):
 
             # Initialize each row with identifying info for the sample plus each exon's coverage of 0.
             # Also create 2 extra exons at end for coding regions of first and last exon
-            subject_coverages[RG['ID']] = sample_info + [0] * (len(exons_merged) + 2)
+            initialized_row = sample_info + [0] * (len(exons_merged) + (2 if add_coding_cols else 0))
+            subject_coverages[RG['ID']] = initialized_row
 
         # Get coverage data for each sample within each exon
         for read in bamfile.fetch('X', start=exons_merged[0]['start'], end=exons_merged[-1]['end']):
@@ -74,24 +75,30 @@ class coverageMatrix(object):
                     if exon_num is not None:
                         subject_coverages[read.get_tag('RG')][exon_num + len(self.base_headers)] += 1
 
-                        # For first and last exon, also check if the read falls in the coding region
-                        if exon_num == 0:
-                            if read.reference_end >= exons_merged[exon_num]['coding_start']:
-                                subject_coverages[read.get_tag('RG')][-2] += 1
-                        elif exon_num == len(exons_merged) - 1:
-                            if read.reference_start <= exons_merged[exon_num]['coding_end']:
-                                subject_coverages[read.get_tag('RG')][-1] += 1
+                        if add_coding_cols:
+                            # For first and last exon, also check if the read falls in the coding region
+                            if exon_num == 0:
+                                if read.reference_end >= exons_merged[exon_num]['coding_start']:
+                                    subject_coverages[read.get_tag('RG')][-2] += 1
+                            elif exon_num == len(exons_merged) - 1:
+                                if read.reference_start <= exons_merged[exon_num]['coding_end']:
+                                    subject_coverages[read.get_tag('RG')][-1] += 1
                 else:
                     util.add_to_dict(skipped_counts, 'MAPQ below 60')
 
         return subject_coverages
 
-    def create_coverage_matrix(self, DMD_exons_merged, exon_labels, bam_dir='/mnt/vep/subjects', subj_name_filter=None):
+    def create_coverage_matrix(self, intervals, interval_labels, bam_dir='/mnt/vep/subjects', subj_name_filter=None, add_coding_cols=True):
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
+        if len(intervals) != len(interval_labels):
+            util.stop_err('Unequal number of intervals ({}) vs interval labels ({})'.format(len(intervals), len(interval_labels)))
+
         self.base_headers = ['id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id', 'lane', 'bwa_version', 'date_modified', 'is_rerun']
-        full_headers = self.base_headers + exon_labels + ['Ex1_coding', 'Ex79_coding']
+        full_headers = self.base_headers + interval_labels
+        if add_coding_cols:
+            full_headers += ['Ex1_coding', 'Ex79_coding']
         subject_count = 0
         skipped_counts = {}
         coverage_matrix = []
@@ -113,8 +120,11 @@ class coverageMatrix(object):
                         continue
 
                     bamfile_path = os.path.join(root, file_name)
-                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, DMD_exons_merged, skipped_counts, root=root)
+                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, add_coding_cols, root=root)
                     coverage_matrix += subject_coverages.values()
+                    if len(coverage_matrix[-1]) != len(full_headers):
+                        util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(coverage_matrix[-1]), len(full_headers)))
+
                     subject_count += 1
                     if subject_count % 20 == 0:
                         self.logger.info('Finished parsing {} subjects'.format(subject_count))
