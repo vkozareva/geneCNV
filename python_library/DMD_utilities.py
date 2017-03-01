@@ -21,7 +21,7 @@ def get_DMD_exons_merged(min_dist=200, print_merged_exons=True):
     return DMD_exons_merged, exon_labels
 
 
-def get_exon_num(read_start, read_end, exon_list, skipped_counts):
+def get_exon_num(read_start, read_end, exon_list, skipped_counts=None):
     """ Determine which exon a read overlaps with, if any """
     exon_num = None
     for i, exon in enumerate(exon_list):
@@ -31,10 +31,11 @@ def get_exon_num(read_start, read_end, exon_list, skipped_counts):
             if exon['start'] <= read_end:
                 # Check if the read pair falls in two exons, and skip if it does.
                 if i != (len(exon_list) - 1) and exon_list[i + 1]['start'] <= read_end:
-                    util.add_to_dict(skipped_counts, 'in_two_exons')
+                    if skipped_counts is not None:
+                        util.add_to_dict(skipped_counts, 'in_two_exons')
                 else:
                     exon_num = i
-            else:
+            elif skipped_counts is not None:
                 util.add_to_dict(skipped_counts, 'outside_of_exon')
             break
     return exon_num
