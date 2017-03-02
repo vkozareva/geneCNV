@@ -12,6 +12,25 @@ class coverageMatrix(object):
         super(coverageMatrix, self).__init__()
         self.logger = util.create_logging()
 
+    def get_unique_panel_intervals(self):
+        """ Get the intervals that are unique to each panel """
+        panel_intervals = {
+            'TSID': {'file': os.path.join('..', 'inputs', 'TruSight_Inherited_Disease_Manifest_A.bed')},
+            'TSO': {'file': os.path.join('..', 'inputs', 'TruSight-One-BED-May-2014.txt')}
+        }
+
+        for name, intrv_info in panel_intervals.items():
+            df = pd.read_csv(intrv_info['file'], delimiter='\t', header=None, names=('chrom', 'start', 'end', 'id'))
+            intrv_info['X_df'] = df[df['chrom'] == 'chrX'].sort_values(by='start')
+            intrv_info['intrv_list'] = map(dict, dict(intrv_info['X_df'].T).values())
+
+        self.unique_panel_intervals = {
+            'TSID': util.interval_diff(panel_intervals['TSO']['intrv_list'], panel_intervals['TSID']['intrv_list'], extend_by=300),
+            'TSO': util.interval_diff(panel_intervals['TSID']['intrv_list'], panel_intervals['TSO']['intrv_list'], extend_by=300)
+        }
+        for panel, unique_intervals in self.unique_panel_intervals.items():
+            self.logger.info('{} only: {} intervals over {} bp'.format(panel, len(unique_intervals), util.add_intervals(unique_intervals)))
+
     def get_sample_info(self, RG, bwa_version, date_modified, root=None):
         """ Gather identifying info for each sample """
         try:
@@ -23,6 +42,10 @@ class coverageMatrix(object):
             flow_cell_id = lane = None
         else:
             flow_cell_id, lane = flow_cell_lane.rsplit('-', 1)
+
+        # simulated CNV subjects have one of these suffixes in this field
+        if 'del' in RG['SM'] or 'dup' in RG['SM']:
+            subject = RG['SM']
 
         gender = subject[0]
         if specimen_sample.startswith(('ACGT', 'Omega')):
@@ -42,55 +65,84 @@ class coverageMatrix(object):
         sample_info = [full_id, subject, specimen, sample, gender, sequencer, flow_cell_id, lane, bwa_version, date_modified, is_re86]
         return sample_info
 
-    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, root=None):
+    def find_unique_panel_reads(self, subject_coverages, bamfile_path):
+        """ Count the reads that fall in intervals anywhere in the X chromosome that are unique to each panel """
+
+        aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
+        merged_unique_intervals = util.interval_union(*self.unique_panel_intervals.values())
+        for read in aligned_bamfile.fetch('X', merged_unique_intervals[0]['start'], end=merged_unique_intervals[-1]['end']):
+            if not read.is_unmapped and read.mapping_quality == 60:
+                for panel, unique_intervals in self.unique_panel_intervals.iteritems():
+                    exon_num = DMD_util.get_exon_num(read.reference_start, read.reference_end, unique_intervals)
+                    if exon_num is not None:
+                        subject_coverages[read.get_tag('RG')][len(self.base_headers) - (2 if panel == 'TSID' else 1)] += 1
+
+    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, add_coding_cols, root=None):
         """ Create matrix of exon coverage for any given subject """
 
         date_modified = os.path.getmtime(bamfile_path)
 
-        bamfile = pysam.AlignmentFile(bamfile_path, "rb")
+        bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
 
         # Gather identifying info for each sample
         subject_coverages = {}
         bwa_version = next(PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa')
         for RG in bamfile.header['RG']:
             sample_info = self.get_sample_info(RG, bwa_version, date_modified, root=root)
-            if len(sample_info) != len(self.base_headers):
-                util.stop_err('Unequal number of sample info fields vs base headers: {}'.format(zip(self.base_headers, sample_info)))
 
             # Initialize each row with identifying info for the sample plus each exon's coverage of 0.
             # Also create 2 extra exons at end for coding regions of first and last exon
-            subject_coverages[RG['ID']] = sample_info + [0] * (len(exons_merged) + 2)
+            initialized_row = sample_info + [0] * (len(exons_merged) + (4 if add_coding_cols else 2))
+            if len(initialized_row) != len(self.full_headers):
+                util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(initialized_row), len(self.full_headers)))
+
+            subject_coverages[RG['ID']] = initialized_row
+
+        self.find_unique_panel_reads(subject_coverages, bamfile_path)
 
         # Get coverage data for each sample within each exon
-        for read in bamfile.fetch('X', start=exons_merged[0]['start'], end=exons_merged[-1]['end']):
-            if not read.is_unmapped:
-                if read.mapping_quality == 60:
-                    # Find what exon each read falls in, and increase that exon's coverage by 1
-                    exon_num = DMD_util.get_exon_num(read.reference_start, read.reference_end, exons_merged, skipped_counts)
-                    if exon_num is not None:
-                        subject_coverages[read.get_tag('RG')][exon_num + len(self.base_headers)] += 1
+        if exons_merged:
+            for read in bamfile.fetch('X', start=exons_merged[0]['start'], end=exons_merged[-1]['end']):
+                if not read.is_unmapped:
+                    if read.mapping_quality == 60:
+                        # Find what exon each read falls in, and increase that exon's coverage by 1
+                        exon_num = DMD_util.get_exon_num(read.reference_start, read.reference_end, exons_merged, skipped_counts)
+                        if exon_num is not None:
+                            subject_coverages[read.get_tag('RG')][exon_num + len(self.base_headers)] += 1
 
-                        # For first and last exon, also check if the read falls in the coding region
-                        if exon_num == 0:
-                            if read.reference_end >= exons_merged[exon_num]['coding_start']:
-                                subject_coverages[read.get_tag('RG')][-2] += 1
-                        elif exon_num == len(exons_merged) - 1:
-                            if read.reference_start <= exons_merged[exon_num]['coding_end']:
-                                subject_coverages[read.get_tag('RG')][-1] += 1
-                else:
-                    util.add_to_dict(skipped_counts, 'MAPQ below 60')
+                            if add_coding_cols:
+                                # For first and last exon, also check if the read falls in the coding region
+                                if exon_num == 0:
+                                    if read.reference_end >= exons_merged[exon_num]['coding_start']:
+                                        subject_coverages[read.get_tag('RG')][-2] += 1
+                                elif exon_num == len(exons_merged) - 1:
+                                    if read.reference_start <= exons_merged[exon_num]['coding_end']:
+                                        subject_coverages[read.get_tag('RG')][-1] += 1
+                    else:
+                        util.add_to_dict(skipped_counts, 'MAPQ below 60')
 
         return subject_coverages
 
-    def create_coverage_matrix(self, DMD_exons_merged, exon_labels, bam_dir='/mnt/vep/subjects', subj_name_filter=None):
+    def create_coverage_matrix(self, intervals, interval_labels, bam_dir=None, subj_name_filter=None, add_coding_cols=False):
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
-        self.base_headers = ['id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id', 'lane', 'bwa_version', 'date_modified', 'is_rerun']
-        full_headers = self.base_headers + exon_labels + ['Ex1_coding', 'Ex79_coding']
+        if len(intervals) != len(interval_labels):
+            util.stop_err('Unequal number of intervals ({}) vs interval labels ({})'.format(len(intervals), len(interval_labels)))
+
+        self.get_unique_panel_intervals()
+
+        self.base_headers = [
+            'id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id',
+            'lane', 'bwa_version', 'date_modified', 'is_rerun', 'TSID_only', 'TSO_only']
+        self.full_headers = self.base_headers + interval_labels
+        if add_coding_cols:
+            self.full_headers += ['Ex1_coding', 'Ex79_coding']
         subject_count = 0
         skipped_counts = {}
         coverage_matrix = []
+        if bam_dir is None:
+            bam_dir = '/mnt/vep/subjects'
         for root, dirs, files in os.walk(bam_dir):
             for file_name in files:
                 if file_name.endswith('.bam'):
@@ -109,13 +161,14 @@ class coverageMatrix(object):
                         continue
 
                     bamfile_path = os.path.join(root, file_name)
-                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, DMD_exons_merged, skipped_counts, root=root)
+                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, add_coding_cols, root=root)
                     coverage_matrix += subject_coverages.values()
+
                     subject_count += 1
                     if subject_count % 20 == 0:
                         self.logger.info('Finished parsing {} subjects'.format(subject_count))
 
-        coverage_matrix_df = pd.DataFrame(coverage_matrix, columns=full_headers)
+        coverage_matrix_df = pd.DataFrame(coverage_matrix, columns=self.full_headers)
 
         # Log counts of skipped reads
         self.logger.info('Finished parsing all {} subjects'.format(subject_count))
