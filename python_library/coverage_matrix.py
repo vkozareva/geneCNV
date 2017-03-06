@@ -31,6 +31,28 @@ class coverageMatrix(object):
         for panel, unique_intervals in self.unique_panel_intervals.items():
             self.logger.info('{} only: {} intervals over {} bp'.format(panel, len(unique_intervals), util.add_intervals(unique_intervals)))
 
+    def filter_bamfiles(self, file_name, files, subj_name_filter):
+        """ Filter out unwanted bam files. Return True if bamfile should be used, otherwise return False """
+        if not file_name.endswith('.bam'):
+            return False
+
+        # The following subject does not have legit data
+        if 'FPWB-0001-0309' in file_name:
+            return False
+
+        if subj_name_filter is not None:
+            if isinstance(subj_name_filter, list):
+                subject = os.path.splitext(file_name)[0]
+                if subject not in subj_name_filter:
+                    return False
+            elif subj_name_filter not in file_name:
+                return False
+
+        if '{}.bai'.format(file_name) not in files:
+            self.logger.info('{} is missing an index file'.format(file_name))
+            return False
+        return True
+
     def get_sample_info(self, RG, bwa_version, date_modified, root=None):
         """ Gather identifying info for each sample """
         try:
@@ -139,6 +161,7 @@ class coverageMatrix(object):
 
         self.get_unique_panel_intervals()
 
+        # Initiate matrix headers
         self.base_headers = [
             'id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id',
             'lane', 'bwa_version', 'date_modified', 'is_rerun', 'TSID_only', 'TSO_only']
@@ -150,30 +173,28 @@ class coverageMatrix(object):
         coverage_matrix = []
         if bam_dir is None:
             bam_dir = '/mnt/vep/subjects'
+
+        # Count the number of bamfiles that will be used in order to use timing_fields
+        file_count = 0
         for root, dirs, files in os.walk(bam_dir):
             for file_name in files:
-                if file_name.endswith('.bam'):
-                    # The following subject does not have legit data
-                    if 'FPWB-0001-0309' in file_name:
-                        continue
-                    if subj_name_filter is not None:
-                        if isinstance(subj_name_filter, list):
-                            subject = os.path.splitext(file_name)[0]
-                            if subject not in subj_name_filter:
-                                continue
-                        elif subj_name_filter not in file_name:
-                            continue
-                    if '{}.bai'.format(file_name) not in files:
-                        self.logger.info('{} is missing an index file'.format(file_name))
-                        continue
+                use_bamfile = self.filter_bamfiles(file_name, files, subj_name_filter)
+                if use_bamfile:
+                    file_count += 1
+        starting_message = '\nCreating coverage_matrix with {} subjects'.format(file_count)
+        timing_fields = util.initiate_timer(message=starting_message, add_counts=True, logger=self.logger,
+                                            total_counts=file_count, count_steps=3 if file_count > 100 else None)
 
+        # Iterate over all bamfiles in the directory and create the coverage_matrix
+        for root, dirs, files in os.walk(bam_dir):
+            for file_name in files:
+                use_bamfile = self.filter_bamfiles(file_name, files, subj_name_filter)
+                if use_bamfile:
                     bamfile_path = os.path.join(root, file_name)
                     subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, add_coding_cols, root=root)
                     coverage_matrix += subject_coverages.values()
 
-                    subject_count += 1
-                    if subject_count % 20 == 0:
-                        self.logger.info('Finished parsing {} subjects'.format(subject_count))
+                    util.get_timing(timing_fields, display_counts=True)
 
         coverage_matrix_df = pd.DataFrame(coverage_matrix, columns=self.full_headers)
 
