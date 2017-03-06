@@ -77,7 +77,7 @@ class coverageMatrix(object):
                     if exon_num is not None:
                         subject_coverages[read.get_tag('RG')][len(self.base_headers) - (2 if panel == 'TSID' else 1)] += 1
 
-    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, add_coding_cols, root=None):
+    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, add_coding_cols, add_unique_counts, root=None):
         """ Create matrix of exon coverage for any given subject """
 
         date_modified = os.path.getmtime(bamfile_path)
@@ -92,13 +92,14 @@ class coverageMatrix(object):
 
             # Initialize each row with identifying info for the sample plus each exon's coverage of 0.
             # Also create 2 extra exons at end for coding regions of first and last exon
-            initialized_row = sample_info + [0] * (len(exons_merged) + (4 if add_coding_cols else 2))
+            initialized_row = sample_info + [0] * (len(exons_merged) + (2 if add_coding_cols else 0) + (2 if add_unique_counts else 0))
             if len(initialized_row) != len(self.full_headers):
                 util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(initialized_row), len(self.full_headers)))
 
             subject_coverages[RG['ID']] = initialized_row
 
-        self.find_unique_panel_reads(subject_coverages, bamfile_path)
+        if add_unique_counts:
+            self.find_unique_panel_reads(subject_coverages, bamfile_path)
 
         # Get coverage data for each sample within each exon
         if exons_merged:
@@ -123,7 +124,8 @@ class coverageMatrix(object):
 
         return subject_coverages
 
-    def create_coverage_matrix(self, intervals, interval_labels, bam_dir=None, subj_name_filter=None, add_coding_cols=False):
+    def create_coverage_matrix(self, intervals, interval_labels, bam_dir=None, subj_name_filter=None, add_coding_cols=False,
+                               add_unique_counts=False):
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
@@ -134,7 +136,9 @@ class coverageMatrix(object):
 
         self.base_headers = [
             'id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id',
-            'lane', 'bwa_version', 'date_modified', 'is_rerun', 'TSID_only', 'TSO_only']
+            'lane', 'bwa_version', 'date_modified', 'is_rerun']
+        if add_unique_counts:
+            self.base_headers = self.base_headers + ['TSID_only', 'TSO_only']
         self.full_headers = self.base_headers + interval_labels
         if add_coding_cols:
             self.full_headers += ['Ex1_coding', 'Ex79_coding']
@@ -161,7 +165,7 @@ class coverageMatrix(object):
                         continue
 
                     bamfile_path = os.path.join(root, file_name)
-                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, add_coding_cols, root=root)
+                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, add_coding_cols, add_unique_counts, root=root)
                     coverage_matrix += subject_coverages.values()
 
                     subject_count += 1
