@@ -21,8 +21,8 @@ class coverageMatrix(object):
 
         for name, intrv_info in panel_intervals.items():
             df = pd.read_csv(intrv_info['file'], delimiter='\t', header=None, names=('chrom', 'start', 'end', 'id'))
-            intrv_info['X_df'] = df[df['chrom'] == 'chrX'].sort_values(by='start')
-            intrv_info['intrv_list'] = map(dict, dict(intrv_info['X_df'].T).values())
+            X_df = df[df['chrom'] == 'chrX'].sort_values(by='start')
+            intrv_info['intrv_list'] = map(dict, dict(X_df.T).values())
 
         self.unique_panel_intervals = {
             'TSID': util.interval_diff(panel_intervals['TSO']['intrv_list'], panel_intervals['TSID']['intrv_list'], extend_by=300),
@@ -73,8 +73,8 @@ class coverageMatrix(object):
         for read in aligned_bamfile.fetch('X', merged_unique_intervals[0]['start'], end=merged_unique_intervals[-1]['end']):
             if not read.is_unmapped and read.mapping_quality == 60:
                 for panel, unique_intervals in self.unique_panel_intervals.iteritems():
-                    exon_num = DMD_util.get_exon_num(read.reference_start, read.reference_end, unique_intervals)
-                    if exon_num is not None:
+                    within_interval = util.in_interval((read.reference_start, read.reference_end), unique_intervals)[0]
+                    if within_interval:
                         subject_coverages[read.get_tag('RG')][len(self.base_headers) - (2 if panel == 'TSID' else 1)] += 1
 
     def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, add_coding_cols, root=None):
@@ -106,18 +106,25 @@ class coverageMatrix(object):
                 if not read.is_unmapped:
                     if read.mapping_quality == 60:
                         # Find what exon each read falls in, and increase that exon's coverage by 1
-                        exon_num = DMD_util.get_exon_num(read.reference_start, read.reference_end, exons_merged, skipped_counts)
-                        if exon_num is not None:
-                            subject_coverages[read.get_tag('RG')][exon_num + len(self.base_headers)] += 1
+                        exon_indexes = util.in_interval((read.reference_start, read.reference_end), exons_merged)[1]
 
-                            if add_coding_cols:
-                                # For first and last exon, also check if the read falls in the coding region
-                                if exon_num == 0:
-                                    if read.reference_end >= exons_merged[exon_num]['coding_start']:
-                                        subject_coverages[read.get_tag('RG')][-2] += 1
-                                elif exon_num == len(exons_merged) - 1:
-                                    if read.reference_start <= exons_merged[exon_num]['coding_end']:
-                                        subject_coverages[read.get_tag('RG')][-1] += 1
+                        if exon_indexes is not None:
+                            if len(exon_indexes) > 1:
+                                util.add_to_dict(skipped_counts, 'in_two_exons')
+                            else:
+                                exon_num = exon_indexes[0]
+                                subject_coverages[read.get_tag('RG')][exon_num + len(self.base_headers)] += 1
+
+                                if add_coding_cols:
+                                    # For first and last exon, also check if the read falls in the coding region
+                                    if exon_num == 0:
+                                        if read.reference_end >= exons_merged[exon_num]['coding_start']:
+                                            subject_coverages[read.get_tag('RG')][-2] += 1
+                                    elif exon_num == len(exons_merged) - 1:
+                                        if read.reference_start <= exons_merged[exon_num]['coding_end']:
+                                            subject_coverages[read.get_tag('RG')][-1] += 1
+                        else:
+                            util.add_to_dict(skipped_counts, 'outside_of_exon')
                     else:
                         util.add_to_dict(skipped_counts, 'MAPQ below 60')
 
