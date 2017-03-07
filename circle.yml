@@ -14,5 +14,5 @@ compile:
 
 test:
   override:
-    - pylint genepeeks
+    - pylint dmd
     - dmd evaluate-sample -h
