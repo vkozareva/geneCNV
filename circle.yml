@@ -15,4 +15,5 @@ compile:
 test:
   override:
     - pylint dmd
+    - nosetests dmd
     - dmd evaluate-sample -h
