@@ -90,16 +90,18 @@ class coverageMatrix(object):
     def find_unique_panel_reads(self, subject_coverages, bamfile_path):
         """ Count the reads that fall in intervals anywhere in the X chromosome that are unique to each panel """
 
-        aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-        merged_unique_intervals = util.interval_union(*self.unique_panel_intervals.values())
-        for read in aligned_bamfile.fetch('X', merged_unique_intervals[0]['start'], end=merged_unique_intervals[-1]['end']):
-            if not read.is_unmapped and read.mapping_quality == 60:
-                for panel, unique_intervals in self.unique_panel_intervals.iteritems():
-                    within_interval = util.in_interval((read.reference_start, read.reference_end), unique_intervals)[0]
-                    if within_interval:
-                        subject_coverages[read.get_tag('RG')][len(self.base_headers) - (2 if panel == 'TSID' else 1)] += 1
+        for panel, unique_intervals in self.unique_panel_intervals.iteritems():
+            aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
+            for i, target in enumerate(unique_intervals):
+                for read in aligned_bamfile.fetch('X', start=target['start'] - 1, end=target['end'] + 1):
+                    if not read.is_unmapped and read.mapping_quality == 60:
+                        # If a read is in multiple targets, only count it once by waiting until the last target it is in to count it
+                        if i != len(unique_intervals) - 1 and read.reference_end >= unique_intervals[i + 1]['start']:
+                            pass
+                        else:
+                            subject_coverages[read.get_tag('RG')][len(self.base_headers) - (2 if panel == 'TSID' else 1)] += 1
 
-    def get_subject_coverage_matrix(self, bamfile_path, exons_merged, skipped_counts, add_coding_cols, root=None):
+    def get_subject_coverage_matrix(self, bamfile_path, intervals, skipped_counts, root=None):
         """ Create matrix of exon coverage for any given subject """
 
         date_modified = os.path.getmtime(bamfile_path)
@@ -114,7 +116,7 @@ class coverageMatrix(object):
 
             # Initialize each row with identifying info for the sample plus each exon's coverage of 0.
             # Also create 2 extra exons at end for coding regions of first and last exon
-            initialized_row = sample_info + [0] * (len(exons_merged) + (4 if add_coding_cols else 2))
+            initialized_row = sample_info + [0] * (len(intervals) + 2)
             if len(initialized_row) != len(self.full_headers):
                 util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(initialized_row), len(self.full_headers)))
 
@@ -123,36 +125,25 @@ class coverageMatrix(object):
         self.find_unique_panel_reads(subject_coverages, bamfile_path)
 
         # Get coverage data for each sample within each exon
-        if exons_merged:
-            for read in bamfile.fetch('X', start=exons_merged[0]['start'], end=exons_merged[-1]['end']):
+        for i, target in enumerate(intervals):
+            for read in bamfile.fetch('X', start=target['start'] - 1, end=target['end'] + 1):
                 if not read.is_unmapped:
                     if read.mapping_quality == 60:
-                        # Find what exon each read falls in, and increase that exon's coverage by 1
-                        exon_indexes = util.in_interval((read.reference_start, read.reference_end), exons_merged)[1]
-
-                        if exon_indexes is not None:
-                            if len(exon_indexes) > 1:
-                                util.add_to_dict(skipped_counts, 'in_two_exons')
-                            else:
-                                exon_num = exon_indexes[0]
-                                subject_coverages[read.get_tag('RG')][exon_num + len(self.base_headers)] += 1
-
-                                if add_coding_cols:
-                                    # For first and last exon, also check if the read falls in the coding region
-                                    if exon_num == 0:
-                                        if read.reference_end >= exons_merged[exon_num]['coding_start']:
-                                            subject_coverages[read.get_tag('RG')][-2] += 1
-                                    elif exon_num == len(exons_merged) - 1:
-                                        if read.reference_start <= exons_merged[exon_num]['coding_end']:
-                                            subject_coverages[read.get_tag('RG')][-1] += 1
+                        # Check if the read falls in multiple targets, and skip if it does
+                        in_multiple_targets = (
+                            (i != 0 and read.reference_start <= intervals[i - 1]['end']) or
+                            (i != len(intervals) - 1 and read.reference_end >= intervals[i + 1]['start'])
+                        )
+                        if in_multiple_targets:
+                            util.add_to_dict(skipped_counts, 'in_multiple_targets')
                         else:
-                            util.add_to_dict(skipped_counts, 'outside_of_exon')
+                            subject_coverages[read.get_tag('RG')][i + len(self.base_headers)] += 1
                     else:
                         util.add_to_dict(skipped_counts, 'MAPQ below 60')
 
         return subject_coverages
 
-    def create_coverage_matrix(self, intervals, interval_labels, bam_dir=None, subj_name_filter=None, add_coding_cols=False):
+    def create_coverage_matrix(self, intervals, interval_labels, bam_dir=None, subj_name_filter=None):
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
@@ -166,9 +157,6 @@ class coverageMatrix(object):
             'id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id',
             'lane', 'bwa_version', 'date_modified', 'is_rerun', 'TSID_only', 'TSO_only']
         self.full_headers = self.base_headers + interval_labels
-        if add_coding_cols:
-            self.full_headers += ['Ex1_coding', 'Ex79_coding']
-        subject_count = 0
         skipped_counts = {}
         coverage_matrix = []
         if bam_dir is None:
@@ -191,18 +179,20 @@ class coverageMatrix(object):
                 use_bamfile = self.filter_bamfiles(file_name, files, subj_name_filter)
                 if use_bamfile:
                     bamfile_path = os.path.join(root, file_name)
-                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, add_coding_cols, root=root)
+                    subject_coverages = self.get_subject_coverage_matrix(bamfile_path, intervals, skipped_counts, root=root)
                     coverage_matrix += subject_coverages.values()
 
                     util.get_timing(timing_fields, display_counts=True)
 
-        coverage_matrix_df = pd.DataFrame(coverage_matrix, columns=self.full_headers)
+        coverage_df = pd.DataFrame(coverage_matrix, columns=self.full_headers)
+
+        # Add a column with the ratio of inherited disease only reads compared to Trusight One only reads
+        coverage_df['TSID_ratio'] = coverage_df['TSID_only'] / (coverage_df['TSID_only'] + coverage_df['TSO_only'])
 
         # Log counts of skipped reads
-        self.logger.info('Finished parsing all {} subjects'.format(subject_count))
         for key, count in skipped_counts.items():
             self.logger.info('{} reads were skipped due to {}'.format(count, key))
-        return coverage_matrix_df
+        return coverage_df
 
 
 @command('run-matrix')
