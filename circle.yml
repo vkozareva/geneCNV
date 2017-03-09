@@ -14,6 +14,6 @@ compile:
 
 test:
   override:
-    - pylint dmd
-    - nosetests dmd
-    - dmd evaluate-sample -h
+    - pylint cnv
+    - nosetests cnv
+    - cnv evaluate-sample -h

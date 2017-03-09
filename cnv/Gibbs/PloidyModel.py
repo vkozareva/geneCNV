@@ -1,7 +1,7 @@
 """The main Gibbs Sampling Model """
 from IntensitiesDistribution import IntensitiesDistribution
 from CopyNumberDistribution import CopyNumberDistribution
-from dmd.Targets.TargetCollection import TargetCollection
+from cnv.Targets.TargetCollection import TargetCollection
 
 class PloidyModel(object):
     """This is the full statistical model and class that runs the Gibbs Sampling. It is responsible for taking a

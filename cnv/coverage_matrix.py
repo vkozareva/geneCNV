@@ -1,5 +1,5 @@
 from genepeeks.common import utilities as util
-import DMD_utilities as DMD_util
+import utilities as cnv_util
 import pysam
 import os
 import pandas as pd
@@ -198,7 +198,7 @@ class coverageMatrix(object):
 @command('run-matrix')
 def run_matrix(bam_dir='../../library_files/inputs/bam_files', subj_filter=None, to_csv=False, wanted_gene='DMD'):
     """ Create coverage_matrix from given bam directory. Use subj_filter to only include certain bamfiles, and use to_csv to create a csv file of the matrix """
-    exons_merged, exon_labels = DMD_util.get_merged_exons(wanted_gene=wanted_gene)
+    exons_merged, exon_labels = cnv_util.get_merged_exons(wanted_gene=wanted_gene)
 
     # sample subj_name_filter: 'FRMR-00AW-8645' or 'RMR'
     subj_name_filter = subj_filter.split(',') if subj_filter and ',' in subj_filter else subj_filter
