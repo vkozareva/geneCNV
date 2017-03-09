@@ -121,8 +121,7 @@ class coverageMatrix(object):
 
             subject_coverages[RG['ID']] = initialized_row
 
-        if add_unique_counts:
-            self.find_unique_panel_reads(subject_coverages, bamfile_path)
+        self.find_unique_panel_reads(subject_coverages, bamfile_path)
 
         # Get coverage data for each sample within each exon
         for i, target in enumerate(intervals):
@@ -156,8 +155,7 @@ class coverageMatrix(object):
         self.base_headers = [
             'id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id',
             'lane', 'bwa_version', 'date_modified', 'is_rerun']
-        if add_unique_counts:
-            self.base_headers = self.base_headers + ['TSID_only', 'TSO_only']
+        self.base_headers = self.base_headers + ['TSID_only', 'TSO_only']
         self.full_headers = self.base_headers + interval_labels
         skipped_counts = {}
         coverage_matrix = []
