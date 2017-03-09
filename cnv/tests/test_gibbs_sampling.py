@@ -1,6 +1,4 @@
 """
-By Jonathan Freidin
-
 Test code for method of Gibbs Sampling to detect DMD CNVs
 
 Proposed production DMD CNV flow based on the current sampling code:
@@ -20,7 +18,8 @@ DMD test plan:
     generate_gibbs_df()
         Compute a set of X_probs from normal subjects.
         Extract the coverage matrices from a set of test subjects and commit those.
-        Run generate_gibbs_df() on each subject, asserting that the correct CNVs are found.
+        Run generate_gibbs_df() on a set of normal and test subjects, asserting that the correct CNVs are found.
+        Until we have test subject data, use simulated mutations.
 
 Open Issues
     - What data files need to be committed to github?
@@ -29,4 +28,18 @@ Open Issues
 """
 
 import sys, os, unittest
+from mando import command, main
 
+from python_library import DMD_utilities as DMD_util
+
+
+@command('extract_test_coverage_matrices')
+def save_test_subject_coverage_matrices():
+    test_subjects_num = cov.coverageMatrix().create_coverage_matrix(DMD_exons_merged, exon_labels, bam_dir='../bams/test_subjects')
+    
+def load_test_subject_coverage_matrices():
+    return 
+
+
+if __name__ == "__main__":
+    main()
