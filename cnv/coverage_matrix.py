@@ -89,7 +89,6 @@ class coverageMatrix(object):
 
     def find_unique_panel_reads(self, subject_coverages, bamfile_path):
         """ Count the reads that fall in intervals anywhere in the X chromosome that are unique to each panel """
-
         for panel, unique_intervals in self.unique_panel_intervals.iteritems():
             aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
             for i, target in enumerate(unique_intervals):
@@ -122,7 +121,8 @@ class coverageMatrix(object):
 
             subject_coverages[RG['ID']] = initialized_row
 
-        self.find_unique_panel_reads(subject_coverages, bamfile_path)
+        if add_unique_counts:
+            self.find_unique_panel_reads(subject_coverages, bamfile_path)
 
         # Get coverage data for each sample within each exon
         for i, target in enumerate(intervals):
@@ -155,7 +155,9 @@ class coverageMatrix(object):
         # Initiate matrix headers
         self.base_headers = [
             'id', 'subject', 'specimen', 'sample', 'gender', 'sequencer', 'flow_cell_id',
-            'lane', 'bwa_version', 'date_modified', 'is_rerun', 'TSID_only', 'TSO_only']
+            'lane', 'bwa_version', 'date_modified', 'is_rerun']
+        if add_unique_counts:
+            self.base_headers = self.base_headers + ['TSID_only', 'TSO_only']
         self.full_headers = self.base_headers + interval_labels
         skipped_counts = {}
         coverage_matrix = []
