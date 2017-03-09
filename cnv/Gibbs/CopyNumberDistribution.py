@@ -1,4 +1,4 @@
-from dmd.Targets.TargetCollection import TargetCollection
+from cnv.Targets.TargetCollection import TargetCollection
 
 class CopyNumberDistribution(object):
     """A class which describes the distribution of ploidy across the different exons"""

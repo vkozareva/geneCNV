@@ -1,5 +1,5 @@
 import unittest
-from  dmd.Targets.Target import Target
+from cnv.Targets.Target import Target
 
 class TargetTests(unittest.TestCase):
     def test_targetSort(self):
