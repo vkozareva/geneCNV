@@ -1,21 +1,18 @@
-import numpy
-
-
 class Target(object):
     """A simple class which holds a genomic region."""
     __slots__ = ('chrom', 'start', 'end')
 
-    def __init__(self, interval):
+    def __init__(self, chrom, start, end):
         """Create a new target region with start (inclusive) and end (exclusive)"""
-        self.chrom = interval['chrom']
-        self.start = interval['start']
-        self.end = interval['end']
+        self.chrom = chrom
+        self.start = start
+        self.end = end
 
     def overlaps(self, other):
         assert isinstance(other, Target)
-        assert self.chrom == other.chrom
-        return min(self.end, other.end) - max(self.start, other.start)
-        # return self.chrom == other.chrom and self.start < other.end and self.end > other.start
+        # assert self.chrom == other.chrom
+        # return min(self.end, other.end) - max(self.start, other.start)
+        return self.chrom == other.chrom and self.start < other.end and self.end > other.start
 
     def __cmp__(self, other):
         """Orders by name, start, then largest length first"""
