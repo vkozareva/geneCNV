@@ -1,16 +1,59 @@
 from cnv.Targets.TargetCollection import TargetCollection
 
 class CopyNumberDistribution(object):
-    """A class which describes the distribution of ploidy across the different exons"""
-    def __init__(self, targets, data):
-        """Initializes the data to hold past and current samples of ploidy levels for all values in targets"""
-        isinstance(targets, TargetCollection)
+    """A class which describes the distribution of ploidy across the different exons
+    given a support vector for CNVs, an intensity vector, and subject data (optional).
+    Includes methods for Gibbs Sampling."""
+    def __init__(self, cnv_support, X_priors, data=None, cnv=None, scale=9e4, sim_reads=3e4, exon_labels=None):
+        self.cnv_support = cnv_support
+        # initialization of cnv counts and intensity vector
+        if cnv is not None:
+            self.cnv = cnv
+        else:
+            # generate initial guess for exon copy numbers using uniform prior distribution
+            self.cnv = np.random.choice(self.cnv_support, size=len(X_priors)) 
+        print cnv
+        self.scale = scale
+        self.exon_labels = exon_labels
 
-    def sample(self, intensities):
+        # we're using a scaling factor for the X_priors (small ratios give too much variability in the dirichlet)
+        self.X_priors = X_priors
+        X_vect = intensities.sample(self.X_priors, self.scale)
+        # consider returning this vector along with initial cnv vector
+        normed_probs_first = np.multiply(cnv, X_vect) / np.sum(np.multiply(cnv, X_vect))
+        # for testing only
+        if data is not None:
+            self.data = data
+        else:
+            self.data = np.random.multinomial(sim_reads, normed_probs_first)
+
+    def sample(self, intensities, cnv):
         """Given a current set of intensities, and the current ploidy state maintained in this class,
-        sample a new ploidy state """
-        pass
+        sample a new ploidy state."""
+        # sample all cnv values
+        for exon in range(len(self.X_priors)):
+            test = np.zeros(len(self.cnv_support))
+            for value in self.cnv_support:
+                cnv[exon] = value
+                # get new normed probabilities given test value and priors for exon intensities
+                log_likelihood = self.joint_log_p(cnv, X_vect)
+                test[value - 1] = log_likelihood
+            test = test - np.max(test)
+            sample_probs = np.exp(test)
+            sample_probs = sample_probs / np.sum(sample_probs)
+            new_cnv = np.random.choice(self.cnv_support, p = sample_probs)
+            cnv[exon] = new_cnv
+        # sample new X_vect after updating with data
+        X_vect = intensities.sample(self.X_priors, self.scale, self.data)
+        gibbs_X[i] = X_vect
+        
+        log_probs = np.log(np.multiply(cnv, X_vect) / np.sum(np.multiply(cnv, X_vect)))
+        likelihoods = np.sum(np.multiply(log_probs, self.data))
 
-    def output(self, out_file_name):
-        """Report on the posterior distribution obtained by the sampling procedure"""
-        pass
+        return cnv, X_vect, likelihoods
+
+    def joint_log_p(self, cnv, X_vect):
+        log_probs_norm = np.sum(self.data) * -1 * np.log(np.sum(np.multiply(cnv, X_vect)))
+        log_likelihood = (log_probs_norm +
+                          np.sum(np.multiply(np.log(cnv), self.data) +
+                                 np.multiply((self.data + (self.X_priors * self.scale) - 1), np.log(X_vect))))
