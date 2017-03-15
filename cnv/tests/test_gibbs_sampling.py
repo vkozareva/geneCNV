@@ -41,12 +41,13 @@ class TestPlodyModel(unittest.TestCase):
         return None
 
     def test_01_random_data(self):
+        self.compute_X_probs()
         ploidy = PloidyModel(TestPlodyModel.cnv_support, TestPlodyModel.X_probs38)
         ploidy.RunGibbsSampler()
         self.gibbs_cnv_data, self.gibbs_X, gibbs_data_results, self.likelihoods = ploidy.OutputGibbsData(None)
 
     @classmethod
-    def compute_X_probs():
+    def compute_X_probs(cls):
         # get full dataset and also subsets based on gender, sequencer, etc
         coverage_df = pd.read_csv('../exon_data/coverage_matrix.csv', header=0, index_col=0)
         coverage_df.is_rerun.values == False
