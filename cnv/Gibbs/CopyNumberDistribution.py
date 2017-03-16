@@ -1,36 +1,44 @@
+import numpy as np
+
 from cnv.Targets.TargetCollection import TargetCollection
+from IntensitiesDistribution import IntensitiesDistribution
 
 class CopyNumberDistribution(object):
     """A class which describes the distribution of ploidy across the different exons
     given a support vector for CNVs, an intensity vector, and subject data (optional).
     Includes methods for Gibbs Sampling."""
-    def __init__(self, cnv_support, X_priors, data=None, cnv=None, scale=9e4, sim_reads=3e4, exon_labels=None):
+    def __init__(self, cnv_support, X_priors, scale, data=None, cnv=None, sim_reads=3e4, exon_labels=None):
         self.cnv_support = cnv_support
-        # initialization of cnv counts and intensity vector
+        # Initialization of cnv counts.
         if cnv is not None:
             self.cnv = cnv
         else:
             # generate initial guess for exon copy numbers using uniform prior distribution
             self.cnv = np.random.choice(self.cnv_support, size=len(X_priors)) 
-        print cnv
+        # TODO: initialize intensity vector.
+        print self.cnv
         self.scale = scale
         self.exon_labels = exon_labels
 
         # we're using a scaling factor for the X_priors (small ratios give too much variability in the dirichlet)
+        # TODO: Consider pulling this out into PloidyModel:
         self.X_priors = X_priors
-        X_vect = intensities.sample(self.X_priors, self.scale)
+        intensities = IntensitiesDistribution(None, scale)
+        X_vect = intensities.sample(self.X_priors, data)
         # consider returning this vector along with initial cnv vector
-        normed_probs_first = np.multiply(cnv, X_vect) / np.sum(np.multiply(cnv, X_vect))
+        normed_probs_first = np.multiply(self.cnv, X_vect) / np.sum(np.multiply(self.cnv, X_vect))
         # for testing only
         if data is not None:
             self.data = data
         else:
             self.data = np.random.multinomial(sim_reads, normed_probs_first)
 
-    def sample(self, intensities, cnv):
+    def sample(self, intensities):
         """Given a current set of intensities, and the current ploidy state maintained in this class,
         sample a new ploidy state."""
         # sample all cnv values
+        cnv = np.copy(self.cnv)
+        X_vect = np.random.dirichlet(self.X_priors * self.scale)
         for exon in range(len(self.X_priors)):
             test = np.zeros(len(self.cnv_support))
             for value in self.cnv_support:
