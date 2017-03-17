@@ -1,0 +1,2 @@
+include cnv/inputs/*.txt
+include cnv/inputs/*.bed

@@ -26,6 +26,8 @@ setup(name='cnv',
       description='Library and command line scripts to find copy number variation.',
       packages=find_packages(),
       install_requires=required,
+      include_package_data=True,
+      package_data = {'' : ['inputs/*.txt', 'inputs/*.bed']},
       dependency_links=['git+ssh://git@github.com/GenePeeks/genepeeks-science.git#egg=genepeeks',
                         'https://github.com/GenePeeks/biorest.git/tarball/master#egg=biorest'],
       entry_points={
