@@ -41,9 +41,24 @@ class TestPlodyModel(unittest.TestCase):
         return None
 
     def test_01_random_data(self):
-        TestPlodyModel.X_probs38 = PloidyModel.compute_X_probs(TestPlodyModel.exon_data_dir)
-        ploidy = PloidyModel(TestPlodyModel.cnv_support, TestPlodyModel.X_probs38)
+        """Generate a random copy number vector with uniform distribution over support.
+        Compute a fixed intensity vector which is uniform.
+        Use multinomial to generate the counts for 20000 draws that reflect that distribution.
+        Use Gibbs' method to sample the posterior of the prior + data generated from the prior.
+        Compare the converged posterior probabilities with the random copy numbers.
+        They should match, i.e. the copy number with the highest probability for each exon should be identical to the random copy number."""
+
+        n_targets = 78
+        copy_numbers = np.random.choice(TestPloidyModel.ancnv_support, n_targets)
+        intensity = np.ones(len(copy_numbers))/len(copy_numbers)
+        p_vector = copy_numbers * intensity
+        p_vector /= float(np.sum(p_vector))
+        X_priors = np.random.multinomial(20000, p_vector)
+        
+        ploidy = PloidyModel(TestPlodyModel.cnv_support, TestPlodyModel.X_priors)
         ploidy.RunGibbsSampler()
         self.gibbs_cnv_data, self.gibbs_X, gibbs_data_results, self.likelihoods = ploidy.OutputGibbsData(None)
 
 
+if __name__ == '__main__':
+    unittest.main()
