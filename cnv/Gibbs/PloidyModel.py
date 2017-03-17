@@ -23,10 +23,9 @@ class PloidyModel(object):
         if bamFileName is not None:
             data = TargetCollection.getData(bamFileName)
         self.intensities = IntensitiesDistribution(parameterFileName, scale)
-
         self.cnv_support = cnv_support
-        self.X_priors = X_priors
         self.ploidy = CopyNumberDistribution(cnv_support, self.X_priors, scale, data=None)
+
 
     @staticmethod
     def reshape_coverage_df(df, include_stats=False, groupby='subject', subject_droplist=None, df_counts_wanted=False):
@@ -48,11 +47,13 @@ class PloidyModel(object):
         else:
             return df_norm
 
-    @classmethod
-    def compute_X_probs(cls, exon_data_dir):
+    @staticmethod
+    def compute_X_probs(exon_data_dir):
+        #TODO: Remove any data loading code from here
+
         # get full dataset and also subsets based on gender, sequencer, etc
         coverage_df = pd.read_csv(os.path.join(exon_data_dir, 'coverage_matrix.csv'), header=0, index_col=0)
-        coverage_df.is_rerun.values == False
+        coverage_df.is_rerun.values = False
         # remove rerun data and coding region counts
         coverage_df = coverage_df[coverage_df.is_rerun == False]
         coverage_df.drop(['is_rerun'], axis=1, inplace=True)
@@ -74,25 +75,25 @@ class PloidyModel(object):
         RMA_subset = coverage_df_RMA[coverage_df_RMA.subject.isin(subjects38)]
         gibbs_columns = ['subject'] + [column for column in RMA_subset.columns if 'Ex' in column]
         rma38 = RMA_subset[gibbs_columns]
-        rma38_norm = cls.reshape_coverage_df(rma38, include_stats=True)
+        rma38_norm = PloidyModel.reshape_coverage_df(rma38, include_stats=True)
         return np.array(rma38_norm.Mean)
 
     def RunGibbsSampler(self, cnv=None, numIterations=10000):
         """ Run a Gibbs sampler for several iterations """
 
-        self.gibbs_cnv_data = np.zeros((len(self.X_priors), numIterations))
-        self.gibbs_X = np.zeros((numIterations, len(self.X_priors)))
+        self.gibbs_cnv_data = np.zeros((len(self.intensities.intensities), numIterations))
+        self.gibbs_X = np.zeros((numIterations, len(self.intensities.intensities)))
         self.likelihoods = np.zeros(numIterations)
 
         for i in xrange(0, numIterations):
             if (i+1) % (numIterations / 20) == 0:
                 print 'Finished {} iterations'.format(i)
-            intensities = self.intensities.sample(self.X_priors)
-            cnv, X_vect, likelihoods = self.ploidy.sample(intensities)
+            self.intensities.sample(self.ploidy)
+            likelihood = self.ploidy.sample(self.intensities)
             for exon in range(len(self.X_priors)):
                 self.gibbs_cnv_data[exon, i] = cnv[exon]
-            self.gibbs_X[i] = X_vect
-            self.likelihoods[i] = likelihoods
+            self.gibbs_X[i] = self.intensities.intensities
+            self.likelihoods[i] = likelihood
 
     def OutputGibbsData(self, out_file_name, burn_in=1000, df_wanted=True):
         """Output a results file and a PDF of the posterior probabilities plot.

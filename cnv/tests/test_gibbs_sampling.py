@@ -28,10 +28,6 @@ Open Issues
 """
 
 import sys, os, unittest
-from mando import command, main
-
-import pandas as pd
-
 from cnv.Gibbs.PloidyModel import PloidyModel
 
 
@@ -51,13 +47,3 @@ class TestPlodyModel(unittest.TestCase):
         self.gibbs_cnv_data, self.gibbs_X, gibbs_data_results, self.likelihoods = ploidy.OutputGibbsData(None)
 
 
-@command('extract_test_coverage_matrices')
-def save_test_subject_coverage_matrices():
-    test_subjects_num = cov.coverageMatrix().create_coverage_matrix(DMD_exons_merged, exon_labels, bam_dir='../bams/test_subjects')
-    
-def load_test_subject_coverage_matrices():
-    return 
-
-
-if __name__ == "__main__":
-    main()
