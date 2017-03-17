@@ -134,7 +134,6 @@ class CoverageMatrix(object):
 
             duplicate_read_pairs = {key: value for key, value in read_pairs.items() if value > 2}
             if duplicate_read_pairs:
-                # print target['label'], duplicate_read_pairs
                 util.stop_err('The following read_pairs appeared more than twice within {}: {}'.format(target['label'], duplicate_read_pairs))
 
             # Count the number of unique read pairs as the amount of coverage for any target
