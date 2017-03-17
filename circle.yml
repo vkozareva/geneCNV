@@ -17,3 +17,4 @@ test:
     - pylint cnv
     - nosetests cnv
     - cnv evaluate-sample -h
+    - coverage_matrix run-matrix -h

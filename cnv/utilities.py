@@ -26,7 +26,7 @@ def get_merged_exons(min_dist=200, only_primary_transcript=True, only_coding_reg
     return merged_exons, exon_labels
 
 
-def get_interval_labels(combined_intervals_merged, wanted_gene):
+def add_interval_labels(combined_intervals_merged, wanted_gene):
     """ Get labels for each interval. If interval overlaps with an exon in the primary transcript,
     use primary transcript exon number. Otherwise use target number """
 
@@ -34,7 +34,6 @@ def get_interval_labels(combined_intervals_merged, wanted_gene):
                                                   single_field='ensembl', required=True, print_stats=False)
 
     primary_exons = util.get_nested_value(ensembl_data, ('is_primary', 'transcripts', 'is_primary', 'exons'), required=True)
-    interval_labels = []
     for i, intrv in enumerate(combined_intervals_merged):
         # Check if interval overlaps with the primary transcript, and use that exon number if it does
         primary_exon_indexes = util.in_interval((intrv['start'], intrv['end']), primary_exons)
@@ -42,15 +41,14 @@ def get_interval_labels(combined_intervals_merged, wanted_gene):
             label = 'Ex{}'.format(','.join([str(index + 1) for index in primary_exon_indexes]))
         else:
             label = 'Target{}'.format(i + 1)
-        interval_labels.append(label)
-    return interval_labels
+        intrv['label'] = label
 
 
 def combine_panel_intervals(wanted_gene='DMD', min_dist=629):
     """ Get interval union of intervals from TruSight One and TruSight Inherited Disease """
     bedfile_paths = {
-        'TSID': {'file': os.path.join('..', 'inputs', 'TruSight_Inherited_Disease_Manifest_A.bed')},
-        'TSO': {'file': os.path.join('..', 'inputs', 'TruSight-One-BED-May-2014.txt')}
+        'TSID': {'file': os.path.join(os.path.realpath(os.path.dirname(__file__)), 'inputs', 'TruSight_Inherited_Disease_Manifest_A.bed')},
+        'TSO': {'file': os.path.join(os.path.realpath(os.path.dirname(__file__)), 'inputs', 'TruSight-One-BED-May-2014.txt')}
     }
 
     intervals_list = []
@@ -64,6 +62,6 @@ def combine_panel_intervals(wanted_gene='DMD', min_dist=629):
     combined_intervals = util.interval_union(*intervals_list)
     combined_intervals_merged = util.merge_intervals(combined_intervals, min_dist=min_dist)
 
-    interval_labels = get_interval_labels(combined_intervals_merged, wanted_gene)
+    add_interval_labels(combined_intervals_merged, wanted_gene)
 
-    return combined_intervals_merged, interval_labels
+    return combined_intervals_merged
