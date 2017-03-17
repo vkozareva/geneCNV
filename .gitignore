@@ -93,3 +93,6 @@ ENV/
 
 # Configuration files
 conf/*.ini
+
+# Files of file names
+*.fofn

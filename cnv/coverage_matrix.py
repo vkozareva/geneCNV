@@ -32,10 +32,16 @@ def passes_checks(read, insert_length, max_insert_length, skipped_counts):
     return True
 
 
-class coverageMatrix(object):
-    """docstring for coverageMatrix"""
+class CoverageMatrix(object):
+    """docstring for CoverageMatrix
+
+    :param min_interval_separation: Any two intervals that are closer than this distance will be merged together,
+        and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
+        was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
+
+    """
     def __init__(self, min_interval_separation=629):
-        super(coverageMatrix, self).__init__()
+        super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
         self.min_interval_separation = min_interval_separation
 
@@ -66,29 +72,7 @@ class coverageMatrix(object):
             self.unique_panel_intervals[panel] = unique_intervals_merged
         assert util.interval_intersect(*self.unique_panel_intervals.values()) == []
 
-    def filter_bamfiles(self, file_name, files, subj_name_filter):
-        """ Filter out unwanted bam files. Return True if bamfile should be used, otherwise return False """
-        if not file_name.endswith('.bam'):
-            return False
-
-        # The following subject does not have legit data
-        if 'FPWB-0001-0309' in file_name:
-            return False
-
-        if subj_name_filter is not None:
-            if isinstance(subj_name_filter, list):
-                subject = os.path.splitext(file_name)[0]
-                if subject not in subj_name_filter:
-                    return False
-            elif subj_name_filter not in file_name:
-                return False
-
-        if '{}.bai'.format(file_name) not in files:
-            self.logger.info('{} is missing an index file'.format(file_name))
-            return False
-        return True
-
-    def get_sample_info(self, RG, bwa_version, date_modified, root=None):
+    def get_sample_info(self, RG, bwa_version, date_modified):
         """ Gather identifying info for each sample """
         try:
             # normal RG['ID'] format: FCLR-GP01-2121_1-M1-1_HGGF5AFXX-L004
@@ -113,13 +97,8 @@ class coverageMatrix(object):
         specimen = '{}_{}'.format(subject, specimen_num)
         sample = '{}_{}'.format(subject, specimen_sample)
         full_id = RG['ID']
-        if root and root.endswith('re86'):
-            full_id += '_re86'
-            is_re86 = True
-        else:
-            is_re86 = False
 
-        sample_info = [full_id, subject, specimen, sample, gender, baits[0], flow_cell_id, bwa_version, date_modified, is_re86]
+        sample_info = [full_id, subject, specimen, sample, gender, baits[0], flow_cell_id, bwa_version, date_modified]
         return sample_info
 
     def get_unique_panel_reads(self, bamfile_path):
@@ -127,12 +106,12 @@ class coverageMatrix(object):
         unique_panel_reads = {}
         for panel, unique_intervals in self.unique_panel_intervals.iteritems():
             aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-            coverage_vector = self.get_subject_coverage(aligned_bamfile, unique_intervals, max_insert_length=self.min_interval_separation)
+            coverage_vector = self.get_subject_coverage(aligned_bamfile, unique_intervals, max_insert_length=self.min_interval_separation, allow_zero_coverage=True)
             unique_panel_reads[panel] = sum(coverage_vector)
         return unique_panel_reads
 
     @staticmethod
-    def get_subject_coverage(bamfile, targets, skipped_counts=None, max_insert_length=629):
+    def get_subject_coverage(bamfile, targets, skipped_counts=None, max_insert_length=629, allow_zero_coverage=False):
         """ Get vector of coverage counts for any given bamfile across any provided target regions """
 
         coverage_vector = []
@@ -141,7 +120,7 @@ class coverageMatrix(object):
             # Scan through all reads in each target, and count the number of unique read pairs
             for read in bamfile.fetch('X', start=target['start'], end=target['end']):
                 insert_length = read.template_length
-                # Multiple insert_length by -1 if the read is reverse
+                # Multiply insert_length by -1 if the read is reverse
                 if read.is_reverse:
                     insert_length *= -1
 
@@ -149,7 +128,6 @@ class coverageMatrix(object):
                 if passes_checks(read, insert_length, max_insert_length, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
-                    # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
                     util.add_to_dict(read_pairs, (read.query_name, pair_start, insert_length))
 
             duplicate_read_pairs = {key: value for key, value in read_pairs.items() if value > 2}
@@ -157,11 +135,17 @@ class coverageMatrix(object):
                 util.stop_err('The following read_pairs appeared more than twice within {}: {}'.format(target['label'], duplicate_read_pairs))
 
             # Count the number of unique read pairs as the amount of coverage for any target
-            coverage_vector.append(len(read_pairs))
+            target_coverage = len(read_pairs)
+
+            # Unless allow_zero_coverage is set to true, do not include subjects that have zero coverage for any of the targets
+            if target_coverage or allow_zero_coverage:
+                coverage_vector.append(target_coverage)
+            else:
+                return None
 
         return coverage_vector
 
-    def create_coverage_matrix(self, targets, bam_dir=None, subj_name_filter=None):
+    def create_coverage_matrix(self, bamfiles_fofn, targets):
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
@@ -170,47 +154,48 @@ class coverageMatrix(object):
         # Initiate matrix headers
         base_headers = [
             'id', 'subject', 'specimen', 'sample', 'gender', 'baits', 'flow_cell_id',
-            'bwa_version', 'date_modified', 'is_rerun', 'TSID_only', 'TSO_only']
+            'bwa_version', 'date_modified', 'TSID_only', 'TSO_only']
         full_headers = base_headers + [target['label'] for target in targets]
+
         skipped_counts = {}
         coverage_matrix = []
-        if bam_dir is None:
-            bam_dir = '/mnt/vep/subjects'
 
-        # Count the number of bamfiles that will be used in order to use timing_fields
-        file_count = 0
-        for root, dirs, files in os.walk(bam_dir):
-            for file_name in files:
-                use_bamfile = self.filter_bamfiles(file_name, files, subj_name_filter)
-                if use_bamfile:
-                    file_count += 1
+        # Load the bamfile paths from the provided fofn (file of file names), or use example.bam
+        with open(bamfiles_fofn) as f:
+            bamfile_paths = [bamfile_path.strip() for bamfile_path in f.readlines()]
+        file_count = len(bamfile_paths)
+
         starting_message = '\nCreating coverage_matrix with {} subjects'.format(file_count)
         timing_fields = util.initiate_timer(message=starting_message, add_counts=True, logger=self.logger,
                                             total_counts=file_count, count_steps=3 if file_count > 100 else None)
 
-        # Iterate over all bamfiles in the directory and create the coverage_matrix
-        for root, dirs, files in os.walk(bam_dir):
-            for file_name in files:
-                use_bamfile = self.filter_bamfiles(file_name, files, subj_name_filter)
-                if use_bamfile:
-                    bamfile_path = os.path.join(root, file_name)
-                    bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-                    date_modified = os.path.getmtime(bamfile_path)
+        # Iterate over all the provided bamfile paths and create the coverage_matrix
+        for bamfile_path in bamfile_paths:
+            if not os.path.exists(bamfile_path):
+                util.stop_err('The bamfile path {} does not exist'.format(bamfile_path))
+            bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
+            if bamfile.has_index():
+                date_modified = os.path.getmtime(bamfile_path)
 
-                    # Get identifying sample info
-                    bwa_version = next(PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa')
-                    sample_info = self.get_sample_info(bamfile.header['RG'][0], bwa_version, date_modified, root=root)
+                # Get identifying sample info
+                bwa_version = next(PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa')
+                sample_info = self.get_sample_info(bamfile.header['RG'][0], bwa_version, date_modified)
 
-                    # Get subject coverage info
-                    subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
+                # Get subject coverage info
+                subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
+                if subj_coverage_vector is not None:
                     unique_panel_reads = self.get_unique_panel_reads(bamfile_path)
                     full_subj_vector = sample_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
                     if len(full_subj_vector) != len(full_headers):
                         util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
 
                     coverage_matrix.append(full_subj_vector)
+                else:
+                    self.logger.warning('{} does not have coverage for every target, and is thus not being included in the coverage_matrix'.format(sample_info[1]))
+            else:
+                self.logger.warning('{} is missing an index'.format(bamfile_path))
 
-                    util.get_timing(timing_fields, display_counts=True)
+            util.get_timing(timing_fields, display_counts=True)
 
         coverage_df = pd.DataFrame(coverage_matrix, columns=full_headers)
 
@@ -224,17 +209,22 @@ class coverageMatrix(object):
 
 
 @command('run-matrix')
-def run_matrix(bam_dir='../../library_files/inputs/bam_files', subj_filter=None, to_csv=False, wanted_gene='DMD', min_dist=629):
-    """ Create coverage_matrix from given bam directory. Use subj_filter to only include certain bamfiles, and use to_csv to create a csv file of the matrix """
+def run_matrix(bamfiles_fofn, to_csv=False, wanted_gene='DMD', min_dist=629):
+    """ Create coverage_matrix from given bam directory.
+
+    :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
+    :param to_csv: Boolean of whether to create a csv file of the matrix
+    :param wanted_gene: Name of the gene for where to get targets from
+    :param min_dist: Any two intervals that are closer than this distance will be merged together,
+        and any read pairs with insert lengths greater than this distance will be skipped
+
+    """
     targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
 
-    # sample subj_name_filter: 'FRMR-00AW-8645' or 'RMR'
-    subj_name_filter = subj_filter.split(',') if subj_filter and ',' in subj_filter else subj_filter
-
-    matrix_instance = coverageMatrix(min_interval_separation=min_dist)
-    coverage_matrix_df = matrix_instance.create_coverage_matrix(targets, bam_dir=bam_dir, subj_name_filter=subj_name_filter)
+    matrix_instance = CoverageMatrix(min_interval_separation=min_dist)
+    coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
     if to_csv:
-        outfile_name = '{}_coverage_matrix{}.csv'.format(wanted_gene, '_' + subj_filter if subj_filter else '')
+        outfile_name = '{}_coverage_matrix.csv'.format(wanted_gene)
         coverage_matrix_df.to_csv("../exon_data/{}".format(outfile_name))
         print 'Finished creating {}'.format(outfile_name)
 
