@@ -79,8 +79,6 @@ class PloidyModel(object):
         return np.array(rma38_norm.Mean)
 
     def RunGibbsSampler(self, cnv=None, numIterations=10000):
-        """ Run a Gibbs sampler for several iterations """
-
         self.gibbs_cnv_data = np.zeros((len(self.intensities.intensities), numIterations))
         self.gibbs_X = np.zeros((numIterations, len(self.intensities.intensities)))
         self.likelihoods = np.zeros(numIterations)

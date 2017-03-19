@@ -44,20 +44,34 @@ class TestPlodyModel(unittest.TestCase):
         """Generate a random copy number vector with uniform distribution over support.
         Compute a fixed intensity vector which is uniform.
         Use multinomial to generate the counts for 20000 draws that reflect that distribution.
-        Use Gibbs' method to sample the posterior of the prior + data generated from the prior.
+        Gibbs Sample the posterior of the prior + data generated from the prior.
         Compare the converged posterior probabilities with the random copy numbers.
         They should match, i.e. the copy number with the highest probability for each exon should be identical to the random copy number."""
 
         n_targets = 78
-        copy_numbers = np.random.choice(TestPloidyModel.ancnv_support, n_targets)
-        intensity = np.ones(len(copy_numbers))/len(copy_numbers)
-        p_vector = copy_numbers * intensity
+        copy_numbers = np.random.choice(TestPloidyModel.cnv_support, n_targets)
+        intensities = np.ones(n_targets)/n_targets
+        p_vector = copy_numbers * intensities
         p_vector /= float(np.sum(p_vector))
         X_priors = np.random.multinomial(20000, p_vector)
         
-        ploidy = PloidyModel(TestPlodyModel.cnv_support, TestPlodyModel.X_priors)
-        ploidy.RunGibbsSampler()
-        self.gibbs_cnv_data, self.gibbs_X, gibbs_data_results, self.likelihoods = ploidy.OutputGibbsData(None)
+        ploidy = CopyNumberDistribution(TestPloidyModel.cnv_support, data=X_priors)
+
+        n_iterations = 10000
+        self.gibbs_cnv_data = np.zeros((n_targets, n_iterations))
+        self.gibbs_X = np.zeros((n_iterations, n_targets))
+        self.likelihoods = np.zeros(n_iterations)
+
+        # Gibbs Sampling
+        for i in xrange(numIterations):
+            if (i+1) % (numIterations / 20) == 0:
+                print 'Finished {} iterations'.format(i)
+            self.intensities.sample(ploidy)
+            likelihood = ploidy.sample(self.intensities)
+            for exon in range(len(self.X_priors)):
+                self.gibbs_cnv_data[exon, i] = cnv[exon]
+            self.gibbs_X[i] = self.intensities.intensities
+            self.likelihoods[i] = likelihood
 
 
 if __name__ == '__main__':

@@ -27,7 +27,6 @@ class CopyNumberDistribution(object):
         """Given a current set of intensities, and the current ploidy state maintained in this class,
         sample a new ploidy state."""
         # sample all cnv values
-        cnv = np.copy(self.cnv)
         for exon in range(len(intensities.intensities)):
             test = np.zeros(len(self.cnv_support))
             for value in self.cnv_support:
