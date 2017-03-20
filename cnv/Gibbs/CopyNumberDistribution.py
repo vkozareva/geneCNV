@@ -5,6 +5,7 @@ class CopyNumberDistribution(object):
     def __init__(self, targets, data):
         """Initializes the data to hold past and current samples of ploidy levels for all values in targets"""
         isinstance(targets, TargetCollection)
+        self.data = data
 
     def sample(self, intensities):
         """Given a current set of intensities, and the current ploidy state maintained in this class,

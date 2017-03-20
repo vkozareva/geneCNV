@@ -1,4 +1,4 @@
-from Target import Target
+
 
 class TargetCollection(object):
     """This class represents an arbitrary list of targets (e.g. DMD exons, TSID bait locations, etc). It
