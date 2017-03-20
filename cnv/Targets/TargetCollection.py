@@ -16,6 +16,7 @@ class TargetCollection(object):
     def filter_intervals(self, gene):
         return self.bed_object.filter(lambda x: x[3].split('.')[0] == gene)
 
-    def save_intervals(self, intervals):
+    @staticmethod
+    def save_intervals(intervals):
         # return [Target(item) for item in intervals]
         return [{'start': intrv.start, 'end': intrv.end, 'chrom': intrv.chrom} for intrv in intervals]
