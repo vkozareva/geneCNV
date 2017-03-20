@@ -4,17 +4,21 @@ from cnv.Targets.TargetCollection import TargetCollection
 from IntensitiesDistribution import IntensitiesDistribution
 
 class CopyNumberDistribution(object):
-    """A class which describes the distribution of ploidy across the different exons
-    given a support vector for CNVs, an intensity vector, and subject data (optional).
-    Includes methods for Gibbs Sampling."""
-    def __init__(self, cnv_support, data=None, cnv=None, sim_reads=3e4, exon_labels=None):
-        self.cnv_support = cnv_support
+    """Describe the distribution of ploidy across a set of targets.
+    Random data is substituted if optional subject data is omitted.
+    Includes methods for Gibbs Sampling of the posterior likelihood."""
+    def __init__(self, targets, data=None, cnv=None, support=[1, 2, 3], sim_reads=3e4):
+        """Initialize the data to hold past and current samples of ploidy levels for all values in targets."""
+        isinstance(targets, TargetCollection)
+        # JF: Are targets and cnv aliases?
+
+        self.support = support
         # Initialization of cnv counts.
         if cnv is not None:
             self.cnv = cnv
         else:
             # generate initial guess for exon copy numbers using uniform prior distribution
-            self.cnv = np.random.choice(self.cnv_support, size=len(data))
+            self.cnv = np.random.choice(self.support, size=len(data))
         # TODO: initialize intensity vector.
         print self.cnv
         # for testing only
@@ -28,8 +32,8 @@ class CopyNumberDistribution(object):
         sample a new ploidy state."""
         # sample all cnv values
         for exon in range(len(intensities.intensities)):
-            test = np.zeros(len(self.cnv_support))
-            for value in self.cnv_support:
+            test = np.zeros(len(self.support))
+            for value in self.support:
                 cnv[exon] = value
                 # get new normed probabilities given test value and priors for exon intensities
                 log_likelihood = self.joint_log_p(cnv, intensities.intensities)
@@ -37,7 +41,7 @@ class CopyNumberDistribution(object):
             test = test - np.max(test)
             sample_probs = np.exp(test)
             sample_probs = sample_probs / np.sum(sample_probs)
-            new_cnv = np.random.choice(self.cnv_support, p = sample_probs)
+            new_cnv = np.random.choice(self.support, p = sample_probs)
             cnv[exon] = new_cnv
 
         log_probs = np.log(np.multiply(cnv, intensities.intensities) / np.sum(np.multiply(cnv, intensities.intensities)))

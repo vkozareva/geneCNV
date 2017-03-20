@@ -14,18 +14,15 @@ class PloidyModel(object):
     parameter set, a BAM file, and a TargetCollection and running a Gibbs sampler to determine the
     posterior probability of different ploidy states."""
 
-    def __init__(self, cnv_support, X_priors, bamFileName=None, targets=None, scale=9e4, parameterFileName=None):
-        """Initialize the data model with its input arguments, we should load the parameters and
-        calculate the coverage at each interval in the BAM file"""
+    def __init__(self, bamFileName, targets, parameterFileName):
+        """Initialize the data model with its input arguments.
+        Load the parameters and calculate the coverage at each interval in the BAM file."""
         # Fake code below
         isinstance(targets, TargetCollection)
-        data = None
-        if bamFileName is not None:
-            data = TargetCollection.getData(bamFileName)
-        self.intensities = IntensitiesDistribution(parameterFileName, scale)
-        self.cnv_support = cnv_support
-        self.ploidy = CopyNumberDistribution(cnv_support, self.X_priors, scale, data=None)
-
+        data = targets.getData(bamFileName)
+        self.intensities = IntensitiesDistribution(parameterFileName)
+        self.cnv_support = [1, 2, 3]
+        self.ploidy = CopyNumberDistribution(targets, data)
 
     @staticmethod
     def reshape_coverage_df(df, include_stats=False, groupby='subject', subject_droplist=None, df_counts_wanted=False):

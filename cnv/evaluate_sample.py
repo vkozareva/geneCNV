@@ -1,12 +1,7 @@
 from mando import main
 from mando import command
-from mando import arg
 import logging
-
-
-
-
-
+#pylint: disable=unused-argument
 
 @command('evaluate-sample')
 def evaluate_sample(subjectID, parametersFile, outputFile):
@@ -28,7 +23,7 @@ def train_model(subjectIDFile, outputFile):
 
     """
     logging.info("Running sample training")
-    logging.info()
+
 
 if __name__ ==  '__main__':
     main()

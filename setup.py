@@ -12,14 +12,12 @@ with open(requirements_file) as f:
     all_reqs = f.read().splitlines()
 
 required = [x for x in all_reqs if not x.startswith("git+")]
+# Need to manually add this since name is different than repo
+required.append('genepeeks')
+required.append('biorest')
 # Specially handle Git repos
 # https://mike.zwobble.org/2013/05/adding-git-or-hg-or-svn-dependencies-in-setup-py/
 gits = [x for x in all_reqs if x.startswith("git+")]
-deps = []
-for repo in gits:
-    rep_name = repo.split("/")[-1].replace(".git", "")
-    required.append(rep_name)
-    deps.append(repo + "#egg=" + rep_name)
 
 
 setup(name='cnv',
@@ -28,7 +26,10 @@ setup(name='cnv',
       description='Library and command line scripts to find copy number variation.',
       packages=find_packages(),
       install_requires=required,
-      dependency_links=deps,
+      include_package_data=True,
+      package_data = {'' : ['inputs/*.txt', 'inputs/*.bed']},
+      dependency_links=['git+ssh://git@github.com/GenePeeks/genepeeks-science.git#egg=genepeeks',
+                        'https://github.com/GenePeeks/biorest.git/tarball/master#egg=biorest'],
       entry_points={
           'console_scripts': 'cnv=cnv.evaluate_sample:main'
       },
