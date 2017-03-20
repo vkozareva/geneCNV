@@ -50,9 +50,10 @@ class PloidyModel(object):
 
         # get full dataset and also subsets based on gender, sequencer, etc
         coverage_df = pd.read_csv(os.path.join(exon_data_dir, 'coverage_matrix.csv'), header=0, index_col=0)
+        # TODO: What's is_rerun about?
         coverage_df.is_rerun.values = False
         # remove rerun data and coding region counts
-        coverage_df = coverage_df[coverage_df.is_rerun == False]
+        coverage_df = coverage_df[coverage_df.is_rerun is False]
         coverage_df.drop(['is_rerun'], axis=1, inplace=True)
         coverage_df.index.name = None
         coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
@@ -93,15 +94,18 @@ class PloidyModel(object):
     def OutputGibbsData(self, out_file_name, burn_in=1000, df_wanted=True):
         """Output a results file and a PDF of the posterior probabilities plot.
         Report on the posterior distribution obtained by the sampling procedure"""
-        # get proportions using burn-in of 1000 iterations 
+        # get proportions using burn-in of 1000 iterations
+        if out_file_name is None:
+            # TODO: Write the output file.
+            pass
         gibbs_data_results = np.zeros((len(self.X_priors), len(self.cnv_support)))
         for index in range(len(self.X_priors)):
             # exclude samples before burn in and then take only every 100th sample to reduce autocorrelation
             gibbs_slice = self.gibbs_cnv_data[index][burn_in:][::100]
-            gibbs_data_results[index] = np.bincount(gibbs_slice.astype(np.int64), 
+            gibbs_data_results[index] = np.bincount(gibbs_slice.astype(np.int64),
                                                     minlength=len(self.cnv_support)+1)[1:]
         gibbs_data_results = gibbs_data_results / float(len(gibbs_slice))
-    
+
         # return df for easier visualization
         if df_wanted:
             gibbs_df = pd.DataFrame(gibbs_data_results, columns =['copy_{}'.format(cnv) for cnv in self.cnv_support])

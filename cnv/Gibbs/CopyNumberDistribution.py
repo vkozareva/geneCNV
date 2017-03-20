@@ -7,10 +7,13 @@ class CopyNumberDistribution(object):
     """Describe the distribution of ploidy across a set of targets.
     Random data is substituted if optional subject data is omitted.
     Includes methods for Gibbs Sampling of the posterior likelihood."""
-    def __init__(self, targets, data=None, cnv=None, support=[1, 2, 3], sim_reads=3e4, logger=logging.getLogger()):
+    def __init__(self, targets, data=None, cnv=None, support=None, sim_reads=3e4, logger=logging.getLogger()):
         """Initialize the data to hold past and current samples of ploidy levels for all values in targets."""
         isinstance(targets, TargetCollection)
-        self.support = support
+        if support is not None:
+            self.support = support
+        else:
+            self.support = [1, 2, 3]
         # Initialization of target copy numbers
         if cnv is not None:
             self.cnv = cnv
@@ -48,6 +51,6 @@ class CopyNumberDistribution(object):
         return likelihood, cnv_probs
 
     def log_p(self, X_probs):
-        normed_probs = np.multiply(self.cnv, X_probs) / np.sum(np.multiply(self.cnv, X_probs)) 
+        normed_probs = np.multiply(self.cnv, X_probs) / np.sum(np.multiply(self.cnv, X_probs))
         log_likelihood =  np.sum(np.multiply(np.log(normed_probs), self.data))
         return log_likelihood
