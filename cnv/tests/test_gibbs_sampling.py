@@ -27,14 +27,22 @@ Open Issues
     - Need some threshold-based code for determining copy number from the posterior distribution.
 """
 
-import sys, os, unittest
-from cnv.Gibbs.PloidyModel import PloidyModel
+import sys, os, unittest, logging
+import numpy as np
+import pandas as pd
+from genepeeks.common import utilities as util
+from cnv.Gibbs.IntensitiesDistribution import IntensitiesDistribution
+from cnv.Gibbs.CopyNumberDistribution import CopyNumberDistribution
 
 
-class TestPlodyModel(unittest.TestCase):
+class TestPloidyModel(unittest.TestCase):
     cnv_support = [1,2,3]
     file_dir = os.path.dirname(__file__)
-    exon_data_dir = os.path.join(file_dir, '..', '..', 'exon_data')
+    exon_data_dir = os.path.join(file_dir, '..', '..', 'exon_data75')
+    # Do we want to use logger here?
+    logger = util.create_logging(to_file=True,
+                                 console_fmt='%(levelname)s: %(message)s',
+                                 file_path='test_gibbs_sampling.log', file_mode='w')
 
     def shortDescription(self):
         """Turn off the nosetests "feature" of using the first line of the doc string as the test name."""
@@ -50,28 +58,46 @@ class TestPlodyModel(unittest.TestCase):
 
         n_targets = 78
         copy_numbers = np.random.choice(TestPloidyModel.cnv_support, n_targets)
-        intensities = np.ones(n_targets)/n_targets
-        p_vector = copy_numbers * intensities
+        self.logger.info('copy_numbers: {}'.format(copy_numbers))
+        intensities = IntensitiesDistribution(np.ones(n_targets)/n_targets)
+        p_vector = copy_numbers * intensities.intensities
         p_vector /= float(np.sum(p_vector))
         X_priors = np.random.multinomial(20000, p_vector)
         
-        ploidy = CopyNumberDistribution(TestPloidyModel.cnv_support, data=X_priors)
+        ploidy = CopyNumberDistribution(TestPloidyModel.cnv_support, data=X_priors, logger=self.logger)
 
-        n_iterations = 10000
-        self.gibbs_cnv_data = np.zeros((n_targets, n_iterations))
-        self.gibbs_X = np.zeros((n_iterations, n_targets))
-        self.likelihoods = np.zeros(n_iterations)
+        n_iterations = 1100
+        gibbs_cnv_data = np.zeros((n_targets, n_iterations))
+        likelihoods = np.zeros(n_iterations)
 
-        # Gibbs Sampling
-        for i in xrange(numIterations):
-            if (i+1) % (numIterations / 20) == 0:
-                print 'Finished {} iterations'.format(i)
-            self.intensities.sample(ploidy)
-            likelihood = ploidy.sample(self.intensities)
-            for exon in range(len(self.X_priors)):
-                self.gibbs_cnv_data[exon, i] = cnv[exon]
-            self.gibbs_X[i] = self.intensities.intensities
-            self.likelihoods[i] = likelihood
+        # Gibbs Sampling of the posterior likelihood.
+        for i in xrange(n_iterations):
+            intensities.sample(ploidy)
+            likelihood, cnv_probs = ploidy.sample(intensities)
+            for exon in range(n_targets):
+                gibbs_cnv_data[exon, i] = ploidy.cnv[exon]
+            likelihoods[i] = likelihood
+            if i % (n_iterations / 20) == 0:
+                self.logger.info('After {} iterations:\ncnv: {}\nlikelihood: {}\ncnv_probs: {}'.format(
+                    i + 1, ploidy.cnv, likelihood, cnv_probs))
+
+        # Get proportions using burn-in of 1000 iterations.
+        gibbs_data_results = np.zeros((n_targets, len(TestPloidyModel.cnv_support)))
+        for target_i in range(n_targets):
+            # Exclude samples before burn in and then take only every 100th sample to reduce autocorrelation.
+            gibbs_slice = gibbs_cnv_data[target_i][1000:][::100]
+            gibbs_data_results[target_i] = np.bincount(gibbs_slice.astype(np.int64), 
+                                                       minlength=len(TestPloidyModel.cnv_support) + 1)[1:]
+        gibbs_data_results /= float(len(gibbs_slice))
+
+        gibbs_df = pd.DataFrame(gibbs_data_results, columns=['copy_{}'.format(cnv) for cnv in TestPloidyModel.cnv_support])
+        gibbs_df['Exon'] = ['exon_{}'.format(i) for i in range(1, 79)]
+        self.logger.info('Gibbs Results:\n{}'.format(gibbs_df))
+
+        for target_i, gibbs_target_result in enumerate(gibbs_data_results):
+            self.assertEqual(TestPloidyModel.cnv_support[list(gibbs_target_result).index(max(gibbs_target_result))],
+                             copy_numbers[target_i],
+                             'Gibbs results mismatch: {} versus {}'.format(gibbs_target_result, copy_numbers[target_i]))
 
 
 if __name__ == '__main__':
