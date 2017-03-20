@@ -52,8 +52,8 @@ class coverageMatrix(object):
             self.logger.info('{} is missing an index file'.format(file_name))
             return False
         return True
-
-    def get_sample_info(self, RG, bwa_version, date_modified, root=None):
+    @staticmethod
+    def get_sample_info(RG, bwa_version, date_modified, root=None):
         """ Gather identifying info for each sample """
         try:
             # normal RG['ID'] format: FCLR-GP01-2121_1-M1-1_HGGF5AFXX-L004

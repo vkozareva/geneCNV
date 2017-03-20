@@ -13,7 +13,7 @@ class PloidyModel(object):
         calculate the coverage at each interval in the BAM file"""
         isinstance(targets, TargetCollection)
         # Fake code below
-        data = TargetCollection.getData(bamFileName)
+        data = targets.getData(bamFileName)
         self.intensities = IntensitiesDistribution.IntensitiesDistribution(parameterFileName)
         self.ploidy = CopyNumberDistribution(targets, data)
 
