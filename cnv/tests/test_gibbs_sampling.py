@@ -62,7 +62,7 @@ class TestPloidyModel(unittest.TestCase):
         p_vector = copy_numbers * intensities
         p_vector /= float(np.sum(p_vector))
 
-        ploidy = PloidyModel(cnv_support, data=np.random.multinomial(10000, p_vector), intensities=intensities, logger=self.logger)
+        ploidy = PloidyModel(cnv_support, data=np.random.multinomial(20000, p_vector), intensities=intensities, logger=self.logger)
         ploidy.RunGibbsSampler()
         gibbs_data_results, gibbs_df = ploidy.ReportGibbsData()
         self.assertEqual([ploidy.cnv_support[list(gibbs_target_result).index(max(gibbs_target_result))]
