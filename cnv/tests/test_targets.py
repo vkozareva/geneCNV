@@ -1,6 +1,7 @@
 import unittest
 from cnv.Targets.Target import Target
 
+
 class TargetTests(unittest.TestCase):
     def test_targetSort(self):
 
@@ -14,7 +15,7 @@ class TargetTests(unittest.TestCase):
         for idx, o in enumerate(order):
             self.assertEquals(rs[idx].start, old[o].start, "Start value was off")
             self.assertEquals(rs[idx].end, old[o].end, "End value was off")
-            self.assertEquals(rs[idx].chromosome, old[o].chromosome, "Start value was off")
+            self.assertEquals(rs[idx].chrom, old[o].chrom, "Start value was off")
 
     def test_targetOverlaps(self):
         a = Target("A", 150, 200)

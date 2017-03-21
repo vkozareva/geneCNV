@@ -29,4 +29,5 @@ notebook
 numpy
 packaging
 pandas
+pybedtools
 pysam
