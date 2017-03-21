@@ -1,5 +1,5 @@
-# from Target import Target
 import pybedtools
+
 
 
 class TargetCollection(object):
