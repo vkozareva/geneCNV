@@ -29,7 +29,7 @@ setup(name='cnv',
       include_package_data=True,
       package_data={'': ['inputs/*.txt', 'inputs/*.bed']},
       dependency_links=['git+ssh://git@github.com/GenePeeks/genepeeks-science.git@develop#egg=genepeeks',
-                        'https://github.com/GenePeeks/biorest.git/tarball/master#egg=biorest'],
+                        'git+ssh://git@github.com/GenePeeks/biorest.git@master#egg=biorest'],
       entry_points={
           'console_scripts': ['cnv=cnv.evaluate_sample:main', 'create_matrix=cnv.coverage_matrix:main']
       },
