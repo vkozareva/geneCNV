@@ -33,13 +33,6 @@ def passes_checks(read, insert_length, max_insert_length, skipped_counts):
 
 
 class CoverageMatrix(object):
-    """docstring for CoverageMatrix
-
-    :param min_interval_separation: Any two intervals that are closer than this distance will be merged together,
-        and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
-        was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
-
-    """
     def __init__(self, min_interval_separation=629):
         super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
@@ -222,7 +215,8 @@ def run_matrix(bamfiles_fofn, outfile=None, wanted_gene='DMD', min_dist=629):
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param wanted_gene: Name of the gene for where to get targets from
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
-        and any read pairs with insert lengths greater than this distance will be skipped
+        and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
+        was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
 
     """
     if bamfiles_fofn.endswith('.bam'):

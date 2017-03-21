@@ -8,10 +8,6 @@ class TargetCollection(object):
         """Given a list of targets, this should sort them and merge appropriately close intervals """
         self.bed_object = pybedtools.BedTool(bedfile_path)
 
-    def getData(self, bamFileName):
-        """Given a BAM file, return a vector with readcounts"""
-        pass
-
     def filter_intervals(self, gene):
         return self.bed_object.filter(lambda x: x[3].split('.')[0] == gene)
 

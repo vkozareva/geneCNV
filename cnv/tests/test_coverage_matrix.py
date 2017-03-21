@@ -1,15 +1,15 @@
 import unittest
-import os
 import pysam
 from cnv import coverage_matrix as cm, utilities as cnv_util
 from genepeeks.common import utilities as util
+from test_resources import EXAMPLE_BAM_PATH
 
 
 class CoverageMatrixTests(unittest.TestCase):
     min_dist = 629
     targets = cnv_util.combine_panel_intervals(min_dist=min_dist)
     matrix_instance = cm.CoverageMatrix(min_interval_separation=min_dist)
-    example_bam = os.path.join(os.path.realpath(os.path.dirname(__file__)), 'data', 'example.bam')
+    example_bam = EXAMPLE_BAM_PATH
 
     def test_targets(self):
         for i, target in enumerate(self.targets):
