@@ -1,7 +1,6 @@
 import pybedtools
 
 
-
 class TargetCollection(object):
     """This class represents an arbitrary list of targets (e.g. DMD exons, TSID bait locations, etc). It
     is useful for organizing/merging targets and can parse a BAM file to produce readcounts across the specified targets"""

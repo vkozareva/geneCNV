@@ -73,7 +73,8 @@ class CoverageMatrix(object):
             unique_panel_intervals[panel] = unique_intervals_merged
         return unique_panel_intervals
 
-    def get_sample_info(self, RG, bwa_version, date_modified):
+    @staticmethod
+    def get_sample_info(RG, bwa_version, date_modified):
         """ Gather identifying info for each sample """
         try:
             # normal RG['ID'] format: FCLR-GP01-2121_1-M1-1_HGGF5AFXX-L004
