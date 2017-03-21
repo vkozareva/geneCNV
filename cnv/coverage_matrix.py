@@ -65,11 +65,11 @@ class CoverageMatrix(object):
 
         # Merge each panel's unique intervals and add a label to each interval
         for panel, unique_intervals in unique_panel_intervals.items():
+            if print_counts:
+                self.logger.info('{} only: {} intervals over {} bp'.format(panel, len(unique_intervals), util.add_intervals(unique_intervals)))
             unique_intervals_merged = util.merge_intervals(unique_intervals, min_dist=self.min_interval_separation, print_counts=print_counts)
             for i, intrv in enumerate(unique_intervals_merged):
                 intrv['label'] = 'unique_{}_Target_{}'.format(panel, i + 1)
-            if print_counts:
-                self.logger.info('{} only: {} intervals over {} bp'.format(panel, len(unique_intervals_merged), util.add_intervals(unique_intervals_merged)))
             unique_panel_intervals[panel] = unique_intervals_merged
         return unique_panel_intervals
 
@@ -214,11 +214,11 @@ class CoverageMatrix(object):
 
 
 @command('run-matrix')
-def run_matrix(bamfiles_fofn, to_csv=False, wanted_gene='DMD', min_dist=629):
-    """ Create coverage_matrix from given bam directory.
+def run_matrix(bamfiles_fofn, outfile=None, wanted_gene='DMD', min_dist=629):
+    """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
-    :param to_csv: Boolean of whether to create a csv file of the matrix
+    :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param wanted_gene: Name of the gene for where to get targets from
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped
@@ -230,10 +230,9 @@ def run_matrix(bamfiles_fofn, to_csv=False, wanted_gene='DMD', min_dist=629):
 
     matrix_instance = CoverageMatrix(min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
-    if to_csv:
-        outfile_name = '{}_coverage_matrix.csv'.format(wanted_gene)
-        coverage_matrix_df.to_csv("../exon_data/{}".format(outfile_name))
-        print 'Finished creating {}'.format(outfile_name)
+    if outfile:
+        coverage_matrix_df.to_csv(outfile)
+        print 'Finished creating {}'.format(outfile)
 
 if __name__ == "__main__":
     main()
