@@ -34,7 +34,7 @@ def add_interval_labels(combined_intervals_merged, primary_exons):
         # Check if interval overlaps with the primary transcript, and use that exon number if it does
         primary_exon_indexes = util.in_interval((intrv['start'], intrv['end']), primary_exons)
         if primary_exon_indexes:
-            label = 'Ex{}'.format(','.join([str(index + 1) for index in primary_exon_indexes]))
+            label = 'Ex{}'.format('-'.join([str(index + 1) for index in primary_exon_indexes]))
         else:
             label = 'Target{}'.format(i + 1)
         intrv['label'] = label
