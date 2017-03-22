@@ -34,6 +34,6 @@ class CoverageMatrixTests(unittest.TestCase):
     def test_subject_coverage(self):
         aligned_bamfile = pysam.AlignmentFile(EXAMPLE_BAM_PATH, 'rb')
         coverage_vector = self.matrix_instance.get_subject_coverage(aligned_bamfile, self.targets, max_insert_length=self.min_dist)
-        self.assertIsNotNone(coverage_vector, 'The bamfile has 0 coverage in one of the targets')
         self.assertEqual(len(coverage_vector), len(self.targets),
                          'There are {} targets but the coverage_vector has length {}'.format(len(self.targets), len(coverage_vector)))
+        self.assertEqual(coverage_vector.count(0), 0, 'The example bamfile has 0 coverage in one of the targets')
