@@ -25,7 +25,9 @@ class CopyNumberDistribution(object):
         if data is not None:
             self.data = data
         else:
-            self.data = np.random.multinomial(sim_reads, self.intensities.intensities)
+            p_vector = self.cnv * self.intensities.intensities
+            p_vector /= np.sum(p_vector)
+            self.data = np.random.multinomial(sim_reads, p_vector)
 
     def sample(self, intensities):
         """Given a current set of intensities, and the current ploidy state maintained in this class,
