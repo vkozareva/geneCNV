@@ -13,7 +13,7 @@ class PloidyModel(object):
     parameter set, a BAM file, and a TargetCollection and running a Gibbs sampler to determine the
     posterior probability of different ploidy states."""
 
-    def __init__(self, cnv_support, targets=None, n_targets=78, parameterFileName=None, bamFileName=None,
+    def __init__(self, cnv_support, cnv=None, targets=None, n_targets=78, parameterFileName=None, bamFileName=None,
                  data=None, intensities=None, logger=None):
         """Initialize the data model with its input arguments.
         Load the parameters and calculate the coverage at each interval in the BAM file."""
@@ -31,14 +31,14 @@ class PloidyModel(object):
             self.n_targets = n_targets
 
         # For bamFileName or data may be specified.
-        if data is None:
+        if bamFileName is not None:
             self.data = targets.getData(bamFileName)
         else:
-            self.data = None
+            self.data = data
 
         self.cnv_support = cnv_support
         self.intensities = IntensitiesDistribution(parameterFileName=parameterFileName, intensities=intensities)
-        self.ploidy = CopyNumberDistribution(targets, data=data, support=self.cnv_support, logger=self.logger)
+        self.ploidy = CopyNumberDistribution(self.targets, data=data, support=self.cnv_support, copies=cnv, logger=self.logger)
 
     def RunGibbsSampler(self, n_iterations=10000):
         """Gibbs sampling of the posterior likelihood"""
@@ -49,14 +49,14 @@ class PloidyModel(object):
         for i in xrange(n_iterations):
             self.intensities.sample(self.ploidy)
             likelihood, cnv_probs = self.ploidy.sample(self.intensities)
-            self.gibbs_cnv_data[:,i] = self.ploidy.cnv
+            self.gibbs_cnv_data[:,i] = self.ploidy.copies
             self.likelihoods[i] = likelihood
             self.gibbs_X[i] = self.intensities.intensities
 
             # Log some convergence info at decile intervals.
             if (i + 1) % (n_iterations / 10) == 0:
                 self.logger.info('After {} iterations:\ncnv: {}\nlikelihood: {}\ncnv_probs: {}'.format(
-                    i + 1, self.ploidy.cnv, likelihood, cnv_probs))
+                    i + 1, self.ploidy.copies, likelihood, cnv_probs))
 
     def ReportGibbsData(self, out_file_name=None, burn_in=1000):
         """Output a results file and a PDF of the posterior probabilities plot.

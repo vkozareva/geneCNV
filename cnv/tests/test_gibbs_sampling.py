@@ -60,12 +60,13 @@ class TestPloidyModel(unittest.TestCase):
         n_draws = 20000
         cnv_support = [1, 2, 3]
         copy_numbers = np.random.choice(cnv_support, n_targets)
-        self.logger.info('copy_numbers: {}'.format(copy_numbers))
+        self.logger.info('Initial target copy numbers: {}'.format(copy_numbers))
         intensities = np.ones(n_targets)/n_targets
         p_vector = copy_numbers * intensities
         p_vector /= float(np.sum(p_vector))
 
-        ploidy = PloidyModel(cnv_support, data=np.random.multinomial(n_draws, p_vector), intensities=intensities, logger=self.logger)
+        ploidy = PloidyModel(cnv_support, cnv=copy_numbers,
+                             data=np.random.multinomial(n_draws, p_vector), intensities=intensities, logger=self.logger)
         ploidy.RunGibbsSampler()
         gibbs_data_results, gibbs_df = ploidy.ReportGibbsData()
         self.assertEqual([ploidy.cnv_support[np.where(gibbs_target_result==max(gibbs_target_result))[0][0]]
