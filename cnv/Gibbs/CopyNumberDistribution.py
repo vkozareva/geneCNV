@@ -1,4 +1,3 @@
-import logging
 import numpy as np
 
 from cnv.Targets.TargetCollection import TargetCollection
@@ -7,7 +6,7 @@ class CopyNumberDistribution(object):
     """Describe the distribution of ploidy across a set of targets.
     Random data is substituted if optional subject data is omitted.
     Includes methods for Gibbs Sampling of the posterior likelihood."""
-    def __init__(self, targets, data=None, support=None, copies=None, sim_reads=20000, logger=logging.getLogger()):
+    def __init__(self, targets, data=None, support=None, copies=None):
         """Initialize the data to hold past and current samples of ploidy levels for all values in targets."""
         isinstance(targets, TargetCollection)
         self.data = data

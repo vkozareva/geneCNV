@@ -38,7 +38,7 @@ class PloidyModel(object):
 
         self.cnv_support = cnv_support
         self.intensities = IntensitiesDistribution(parameterFileName=parameterFileName, intensities=intensities)
-        self.ploidy = CopyNumberDistribution(self.targets, data=data, support=self.cnv_support, copies=cnv, logger=self.logger)
+        self.ploidy = CopyNumberDistribution(self.targets, data=data, support=self.cnv_support, copies=cnv)
 
     def RunGibbsSampler(self, n_iterations=10000):
         """Gibbs sampling of the posterior likelihood"""
