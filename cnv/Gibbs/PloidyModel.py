@@ -49,8 +49,7 @@ class PloidyModel(object):
         for i in xrange(n_iterations):
             self.intensities.sample(self.ploidy)
             likelihood, cnv_probs = self.ploidy.sample(self.intensities)
-            for exon in range(self.n_targets):
-                self.gibbs_cnv_data[exon, i] = self.ploidy.cnv[exon]
+            self.gibbs_cnv_data[:,i] = self.ploidy.cnv
             self.likelihoods[i] = likelihood
             self.gibbs_X[i] = self.intensities.intensities
 

@@ -37,20 +37,16 @@ class CopyNumberDistribution(object):
             for value in self.support:
                 self.cnv[exon] = value
                 # get new normed probabilities given test value and priors for exon intensities
-                log_likelihood = self.log_p(intensities.intensities)
-                cnv_log_probs[value - 1] = log_likelihood
+                cnv_log_probs[value - 1] = self.log_likelihood(intensities.intensities)
             cnv_log_probs = cnv_log_probs - np.max(cnv_log_probs)
             cnv_probs[exon] = np.exp(cnv_log_probs)
             cnv_probs[exon] = cnv_probs[exon] / np.sum(cnv_probs[exon])
             new_cnv = np.random.choice(self.support, p = cnv_probs[exon])
             self.cnv[exon] = new_cnv
 
-        log_probs = np.log(np.multiply(self.cnv, intensities.intensities) / np.sum(np.multiply(self.cnv, intensities.intensities)))
-        likelihood = np.sum(np.multiply(log_probs, self.data))
+        return self.log_likelihood(intensities.intensities), cnv_probs
 
-        return likelihood, cnv_probs
-
-    def log_p(self, X_probs):
-        normed_probs = np.multiply(self.cnv, X_probs) / np.sum(np.multiply(self.cnv, X_probs))
-        log_likelihood =  np.sum(np.multiply(np.log(normed_probs), self.data))
-        return log_likelihood
+    def log_likelihood(self, X_probs):
+        normed_probs = self.cnv * X_probs
+        normed_probs /= np.sum(normed_probs)
+        return np.sum(np.log(normed_probs) * self.data)

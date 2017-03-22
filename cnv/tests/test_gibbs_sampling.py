@@ -1,30 +1,34 @@
 """
 Test code for method of Gibbs Sampling to detect DMD CNVs
 
-Proposed production DMD CNV flow based on the current sampling code:
-    Initialization
-        Compute the coverage matrix of exon intensities from female RMA subjects.
-        Compute a set of priors (X_probs) from those intensities.
+Proposed production DMD CNV flow:
+    Training
+        Compute a set of intensity model hyperparameters from all female subjects run with desired TSO/TSID ratios.
     Per subject
         Create the coverage matrix for the subject.
-        Run Gibbs Sampling on that data using the priors to estimate exon copy numbers.
+        Run Gibbs Sampling on that data using the intensity model to estimate exon copy numbers.
 
-DMD test plan:
-    create_coverage_matrix()
-        Create 10 .bam files that each include a single exon read of a single type for two exons.
-        Run create_coverage_matrix() on each file and assert that exon counts are all zero, except for the included exon.
-        Run create_coverage_matrix() on the aggregation of the test bam files and assert that the counts sum from above.
+Test plan:
+    Training (not done)
+        Create a set of H1 random hyperparameters.
+        Draw n synthetic subjects with r reads each from the intensity model.
+        Train H2 hyperparameters on the synthetic subject draws.
+        Show that as r increases H2 converges on H1.
 
-    generate_gibbs_df()
-        Compute a set of X_probs from normal subjects.
-        Extract the coverage matrices from a set of test subjects and commit those.
-        Run generate_gibbs_df() on a set of normal and test subjects, asserting that the correct CNVs are found.
-        Until we have test subject data, use simulated mutations.
+    Gibbs sampling
+        Random test (done, w/o intensity model)
+            Compute a set of random copy numbers.
+            Draw synthetic reads based on the copy numbers and intensity model.
+            Today the intensity model is uniform but in the future it will be a real model.
+            Run Gibbs sampling on the reads to identify most probable copy numbers.
+            Sampling results should be idential to the random copy numbers.
+        
+        Test with actual subject data (not done)
+            Commit a set of intensity model hyperparameters.
+            Extract the coverage matrices from a set of test subjects and commit those.
+            Run evaluate_sample on the test subject data asserting that the correct copy numbers are found.
 
-Open Issues
-    - What data files need to be committed to github?
-    - Or could we just do some kind of rsync from dropbox to get the large bam files?
-    - Need some threshold-based code for determining copy number from the posterior distribution.
+        Geweke test (not done)
 """
 
 import sys, os, unittest, logging
@@ -36,8 +40,6 @@ from cnv.Gibbs.PloidyModel import PloidyModel
 
 
 class TestPloidyModel(unittest.TestCase):
-    file_dir = os.path.dirname(__file__)
-    exon_data_dir = os.path.join(file_dir, '..', '..', 'exon_data75')
     logger = util.create_logging(to_console=False, to_file=True,
                                  console_fmt='%(levelname)s: %(message)s',
                                  file_path='test_gibbs_sampling.log', file_mode='w')
@@ -55,6 +57,7 @@ class TestPloidyModel(unittest.TestCase):
         The copy number with the highest probability for each exon should be the initial random copy number."""
 
         n_targets = 78
+        n_draws = 20000
         cnv_support = [1, 2, 3]
         copy_numbers = np.random.choice(cnv_support, n_targets)
         self.logger.info('copy_numbers: {}'.format(copy_numbers))
@@ -62,10 +65,10 @@ class TestPloidyModel(unittest.TestCase):
         p_vector = copy_numbers * intensities
         p_vector /= float(np.sum(p_vector))
 
-        ploidy = PloidyModel(cnv_support, data=np.random.multinomial(20000, p_vector), intensities=intensities, logger=self.logger)
+        ploidy = PloidyModel(cnv_support, data=np.random.multinomial(n_draws, p_vector), intensities=intensities, logger=self.logger)
         ploidy.RunGibbsSampler()
         gibbs_data_results, gibbs_df = ploidy.ReportGibbsData()
-        self.assertEqual([ploidy.cnv_support[list(gibbs_target_result).index(max(gibbs_target_result))]
+        self.assertEqual([ploidy.cnv_support[np.where(gibbs_target_result==max(gibbs_target_result))[0][0]]
                           for gibbs_target_result in gibbs_data_results],
                          list(copy_numbers))
 
