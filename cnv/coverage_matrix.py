@@ -136,7 +136,7 @@ class CoverageMatrix(object):
 
         return coverage_vector
 
-    def create_coverage_matrix(self, bamfiles_fofn, targets):
+    def create_coverage_matrix(self, bamfiles_fofn, targets):   # pylint:disable=too-many-branches
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
@@ -173,7 +173,7 @@ class CoverageMatrix(object):
 
                 # Get identifying sample info
                 bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
-                subject_info = None
+                subject_info = []
                 for RG in bamfile.header['RG']:
                     sample_info = self.get_sample_info(RG, bwa_version, date_modified)
                     if not subject_info:
