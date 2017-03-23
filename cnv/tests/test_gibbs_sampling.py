@@ -34,16 +34,11 @@ Test plan:
 import sys, os, unittest, logging
 import numpy as np
 import pandas as pd
-from genepeeks.common import utilities as util
 from cnv.Gibbs.IntensitiesDistribution import IntensitiesDistribution
 from cnv.Gibbs.PloidyModel import PloidyModel
 
 
 class TestPloidyModel(unittest.TestCase):
-    logger = util.create_logging(to_console=False, to_file=True,
-                                 console_fmt='%(levelname)s: %(message)s',
-                                 file_path='test_gibbs_sampling.log', file_mode='w')
-
     def shortDescription(self):
         """Turn off the nosetests "feature" of using the first line of the doc string as the test name."""
         return None
@@ -60,13 +55,13 @@ class TestPloidyModel(unittest.TestCase):
         n_draws = 20000
         cnv_support = [1, 2, 3]
         copy_numbers = np.random.choice(cnv_support, n_targets)
-        self.logger.info('Initial target copy numbers: {}'.format(copy_numbers))
+        logging.info('Initial target copy numbers: {}'.format(copy_numbers))
         intensities = np.ones(n_targets)/n_targets
         p_vector = copy_numbers * intensities
         p_vector /= float(np.sum(p_vector))
 
         ploidy = PloidyModel(cnv_support, cnv=copy_numbers,
-                             data=np.random.multinomial(n_draws, p_vector), intensities=intensities, logger=self.logger)
+                             data=np.random.multinomial(n_draws, p_vector), intensities=intensities)
         ploidy.RunGibbsSampler()
         gibbs_data_results, gibbs_df = ploidy.ReportGibbsData()
         self.assertEqual([ploidy.cnv_support[np.where(gibbs_target_result==max(gibbs_target_result))[0][0]]

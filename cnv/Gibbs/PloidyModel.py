@@ -1,5 +1,6 @@
 """The main Gibbs Sampling Model """
 
+import logging
 import numpy as np
 import pandas as pd
 
@@ -14,11 +15,9 @@ class PloidyModel(object):
     posterior probability of different ploidy states."""
 
     def __init__(self, cnv_support, cnv=None, targets=None, n_targets=78, parameterFileName=None, bamFileName=None,
-                 data=None, intensities=None, logger=None):
+                 data=None, intensities=None):
         """Initialize the data model with its input arguments.
         Load the parameters and calculate the coverage at each interval in the BAM file."""
-        self.logger = logger
-
         # Fake code:
         isinstance(targets, TargetCollection)
 
@@ -55,7 +54,7 @@ class PloidyModel(object):
 
             # Log some convergence info at decile intervals.
             if (i + 1) % (n_iterations / 10) == 0:
-                self.logger.info('After {} iterations:\ncnv: {}\nlikelihood: {}\ncnv_probs: {}'.format(
+                logging.info('After {} iterations:\ncnv: {}\nlikelihood: {}\ncnv_probs: {}'.format(
                     i + 1, self.ploidy.copies, likelihood, cnv_probs))
 
     def ReportGibbsData(self, out_file_name=None, burn_in=1000):
@@ -81,6 +80,6 @@ class PloidyModel(object):
             pass
         else:
             # Log the results
-            self.logger.info('Gibbs Results:\n{}'.format(gibbs_df))
+            logging.info('Gibbs Results:\n{}'.format(gibbs_df))
 
         return gibbs_data_results, gibbs_df
