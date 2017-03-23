@@ -183,25 +183,28 @@ class CoverageMatrix(object):
         for bamfile_path in bamfile_paths:
             if not os.path.exists(bamfile_path):
                 util.stop_err('The bamfile path {} does not exist'.format(bamfile_path))
+
             bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-            if bamfile.has_index():
-                # Get identifying info for each subject
-                date_modified = os.path.getmtime(bamfile_path)
-                subject_info = self.get_subject_info(bamfile, date_modified, base_headers)
+            if not bamfile.has_index():
+                util.stop_err('{} is missing an index'.format(bamfile_path))
 
-                # Get subject coverage info
-                subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
-                if subj_coverage_vector.count(0) * 2 > len(targets):
-                    self.logger.warning('{} is missing coverage for more than half of its targets, and is thus not being included in the coverage_matrix'.format(subject_info[1]))
-                else:
-                    unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals)
-                    full_subj_vector = subject_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
-                    if len(full_subj_vector) != len(full_headers):
-                        util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
+            # Get identifying info for each subject
+            date_modified = os.path.getmtime(bamfile_path)
+            subject_info = self.get_subject_info(bamfile, date_modified, base_headers)
 
-                    coverage_matrix.append(full_subj_vector)
-            else:
-                self.logger.warning('{} is missing an index'.format(bamfile_path))
+            # Get subject coverage vector
+            subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
+            if subj_coverage_vector.count(0) * 2 > len(targets):
+                self.logger.warning('{} is missing coverage for more than half of its targets'.format(subject_info[1]))
+
+            # Get counts of reads in unique panel regions
+            unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals)
+
+            # Create subject row with all needed info for the subject, and add to the coverage_matrix
+            full_subj_vector = subject_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
+            if len(full_subj_vector) != len(full_headers):
+                util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
+            coverage_matrix.append(full_subj_vector)
 
             util.get_timing(timing_fields, display_counts=True)
 
