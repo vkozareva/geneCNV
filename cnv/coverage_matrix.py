@@ -96,6 +96,22 @@ class CoverageMatrix(object):
         sample_info = [full_id, subject, specimen, sample, gender, baits[0], flow_cell_id, bwa_version, date_modified]
         return sample_info
 
+    def get_subject_info(self, bamfile, date_modified, base_headers):
+        """ Gather identifying info for each subject, checking for differences between samples """
+        bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
+        subject_info = []
+        for RG in bamfile.header['RG']:
+            sample_info = self.get_sample_info(RG, bwa_version, date_modified)
+            if not subject_info:
+                subject_info = sample_info
+            elif subject_info[1:] != sample_info[1:]:
+                # Check if a subject has multiple different values for any of the headers
+                for sample1, sample2, id_header in zip(subject_info[1:], sample_info[1:], base_headers):
+                    if sample1 != sample2:
+                        self.logger.warning('{} has multiple different header values in the {} field: {} vs {}'.format(
+                            subject_info[1], id_header, sample1, sample2))
+        return subject_info
+
     def get_unique_panel_reads(self, bamfile_path, unique_panel_intervals):
         """ Count the reads that fall in intervals anywhere in the X chromosome that are unique to each panel """
         unique_panel_reads = {}
@@ -136,7 +152,7 @@ class CoverageMatrix(object):
 
         return coverage_vector
 
-    def create_coverage_matrix(self, bamfiles_fofn, targets):   # pylint:disable=too-many-branches
+    def create_coverage_matrix(self, bamfiles_fofn, targets):
         """ Create coverage matrix with exons as columns, samples as rows, and amount of coverage in each exon as the values,
         plus extra columns for identifying info for each sample """
 
@@ -169,21 +185,9 @@ class CoverageMatrix(object):
                 util.stop_err('The bamfile path {} does not exist'.format(bamfile_path))
             bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
             if bamfile.has_index():
+                # Get identifying info for each subject
                 date_modified = os.path.getmtime(bamfile_path)
-
-                # Get identifying sample info
-                bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
-                subject_info = []
-                for RG in bamfile.header['RG']:
-                    sample_info = self.get_sample_info(RG, bwa_version, date_modified)
-                    if not subject_info:
-                        subject_info = sample_info
-                    elif subject_info[1:] != sample_info[1:]:
-                        # Check if a subject has multiple different values for any of the headers
-                        for sample1, sample2, id_header in zip(subject_info[1:], sample_info[1:], base_headers):
-                            if sample1 != sample2:
-                                self.logger.warning('{} has multiple different header values in the {} field: {} vs {}'.format(
-                                    subject_info[1], id_header, sample1, sample2))
+                subject_info = self.get_subject_info(bamfile, date_modified, base_headers)
 
                 # Get subject coverage info
                 subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
