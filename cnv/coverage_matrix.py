@@ -173,15 +173,25 @@ class CoverageMatrix(object):
 
                 # Get identifying sample info
                 bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
-                sample_info = self.get_sample_info(bamfile.header['RG'][0], bwa_version, date_modified)
+                subject_info = None
+                for RG in bamfile.header['RG']:
+                    sample_info = self.get_sample_info(RG, bwa_version, date_modified)
+                    if not subject_info:
+                        subject_info = sample_info
+                    elif subject_info[1:] != sample_info[1:]:
+                        # Check if a subject has multiple different values for any of the headers
+                        for sample1, sample2, id_header in zip(subject_info[1:], sample_info[1:], base_headers):
+                            if sample1 != sample2:
+                                self.logger.warning('{} has multiple different header values in the {} field: {} vs {}'.format(
+                                    subject_info[1], id_header, sample1, sample2))
 
                 # Get subject coverage info
                 subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
                 if subj_coverage_vector.count(0) * 2 > len(targets):
-                    self.logger.warning('{} is missing coverage for more than half of its targets, and is thus not being included in the coverage_matrix'.format(sample_info[1]))
+                    self.logger.warning('{} is missing coverage for more than half of its targets, and is thus not being included in the coverage_matrix'.format(subject_info[1]))
                 else:
                     unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals)
-                    full_subj_vector = sample_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
+                    full_subj_vector = subject_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
                     if len(full_subj_vector) != len(full_headers):
                         util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
 
