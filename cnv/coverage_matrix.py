@@ -101,12 +101,11 @@ class CoverageMatrix(object):
         unique_panel_reads = {}
         for panel, unique_intervals in unique_panel_intervals.iteritems():
             aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-            coverage_vector = self.get_subject_coverage(aligned_bamfile, unique_intervals, max_insert_length=self.min_interval_separation)
+            coverage_vector = self.get_subject_coverage(aligned_bamfile, unique_intervals)
             unique_panel_reads[panel] = sum(coverage_vector)
         return unique_panel_reads
 
-    @staticmethod
-    def get_subject_coverage(bamfile, targets, skipped_counts=None, max_insert_length=629):
+    def get_subject_coverage(self, bamfile, targets, skipped_counts=None):
         """ Get vector of coverage counts for any given bamfile across any provided target regions """
 
         coverage_vector = []
@@ -120,7 +119,7 @@ class CoverageMatrix(object):
                     insert_length *= -1
 
                 # Only count reads that pass the necessary quality checks, and keep counts of those that don't
-                if passes_checks(read, insert_length, max_insert_length, skipped_counts):
+                if passes_checks(read, insert_length, self.min_interval_separation, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
                     # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
@@ -128,7 +127,8 @@ class CoverageMatrix(object):
 
             duplicate_read_pairs = {key: value for key, value in read_pairs.items() if value > 2}
             if duplicate_read_pairs:
-                print 'The following read_pairs appeared more than twice within {}: {}'.format(target['label'], duplicate_read_pairs)
+                self.logger.warning('For {}, the following read_pairs appeared more than twice within {}: {}'.format(
+                    bamfile.header['RG'][0]['SM'], target['label'], duplicate_read_pairs))
 
             # Count the number of unique read pairs as the amount of coverage for any target
             target_coverage = len(read_pairs)
