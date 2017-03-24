@@ -1,4 +1,5 @@
 import os
+import pickle
 import pysam
 import pandas as pd
 from mando import command, main
@@ -220,11 +221,12 @@ class CoverageMatrix(object):
 
 
 @command('run-matrix')
-def run_matrix(bamfiles_fofn, outfile=None, wanted_gene='DMD', min_dist=629):
+def run_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
+    :param targetfile: Path to an output file to contain target intervals as a pickled object.
     :param wanted_gene: Name of the gene for where to get targets from
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
@@ -234,6 +236,9 @@ def run_matrix(bamfiles_fofn, outfile=None, wanted_gene='DMD', min_dist=629):
     if bamfiles_fofn.endswith('.bam'):
         bamfiles_fofn = bamfiles_fofn.split(',')
     targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
+    if targetfile:
+        with open(targetfile, 'w') as f:
+            pickle.dump(targets, f)
 
     matrix_instance = CoverageMatrix(min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
