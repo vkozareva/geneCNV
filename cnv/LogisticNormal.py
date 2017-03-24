@@ -8,8 +8,6 @@ def loglike_vcond(z, n, edf, mu, inv_cov):
     """Calculates the negative log likelihood of z (v in our notation above) conditional on the data and current values of
     mu and cov"""
     z = z.reshape((-1,1))
-    pz = np.exp(z - np.amax(z))
-    pz = pz / (np.exp(-np.amax(z)) + np.sum(pz))
 
     neg_loglike = (-(n * np.dot(z.flatten(), edf.flatten()) - n * np.log(1 + np.sum(np.exp(z))) -
                    0.5 *np.dot(np.dot((z - mu).T, inv_cov), (z - mu))))
@@ -141,7 +139,7 @@ def gen_hln_samples(numdocs, numdraws, mu, cov):
     X = X / X.sum(axis=1)[:, None]  # add the extra dimension so matrix division returns properly
 
     Y = np.zeros((numdocs, len(mu)+1))
-    for i, x in enumerate(X):
-        Y[i] = np.random.multinomial(numdraws, x)
+    for i in range(len(X)):
+        Y[i] = np.random.multinomial(numdraws, X[i])
 
     return Y, X
