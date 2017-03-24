@@ -96,17 +96,32 @@ class CoverageMatrix(object):
         sample_info = [full_id, subject, specimen, sample, gender, baits[0], flow_cell_id, bwa_version, date_modified]
         return sample_info
 
+    def get_subject_info(self, bamfile, date_modified, base_headers):
+        """ Gather identifying info for each subject, checking for differences between samples """
+        bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
+        subject_info = []
+        for RG in bamfile.header['RG']:
+            sample_info = self.get_sample_info(RG, bwa_version, date_modified)
+            if not subject_info:
+                subject_info = sample_info
+            elif subject_info[1:] != sample_info[1:]:
+                # Check if a subject has multiple different values for any of the headers
+                for sample1, sample2, id_header in zip(subject_info[1:], sample_info[1:], base_headers):
+                    if sample1 != sample2:
+                        self.logger.warning('{} has multiple different header values in the {} field: {} vs {}'.format(
+                            subject_info[1], id_header, sample1, sample2))
+        return subject_info
+
     def get_unique_panel_reads(self, bamfile_path, unique_panel_intervals):
         """ Count the reads that fall in intervals anywhere in the X chromosome that are unique to each panel """
         unique_panel_reads = {}
         for panel, unique_intervals in unique_panel_intervals.iteritems():
             aligned_bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-            coverage_vector = self.get_subject_coverage(aligned_bamfile, unique_intervals, max_insert_length=self.min_interval_separation, allow_zero_coverage=True)
+            coverage_vector = self.get_subject_coverage(aligned_bamfile, unique_intervals)
             unique_panel_reads[panel] = sum(coverage_vector)
         return unique_panel_reads
 
-    @staticmethod
-    def get_subject_coverage(bamfile, targets, skipped_counts=None, max_insert_length=629, allow_zero_coverage=False):
+    def get_subject_coverage(self, bamfile, targets, skipped_counts=None):
         """ Get vector of coverage counts for any given bamfile across any provided target regions """
 
         coverage_vector = []
@@ -120,7 +135,7 @@ class CoverageMatrix(object):
                     insert_length *= -1
 
                 # Only count reads that pass the necessary quality checks, and keep counts of those that don't
-                if passes_checks(read, insert_length, max_insert_length, skipped_counts):
+                if passes_checks(read, insert_length, self.min_interval_separation, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
                     # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
@@ -128,16 +143,12 @@ class CoverageMatrix(object):
 
             duplicate_read_pairs = {key: value for key, value in read_pairs.items() if value > 2}
             if duplicate_read_pairs:
-                util.stop_err('The following read_pairs appeared more than twice within {}: {}'.format(target['label'], duplicate_read_pairs))
+                self.logger.warning('For {}, the following read_pairs appeared more than twice within {}: {}'.format(
+                    bamfile.header['RG'][0]['SM'], target['label'], duplicate_read_pairs))
 
             # Count the number of unique read pairs as the amount of coverage for any target
             target_coverage = len(read_pairs)
-
-            # Unless allow_zero_coverage is set to true, do not include subjects that have zero coverage for any of the targets
-            if target_coverage or allow_zero_coverage:
-                coverage_vector.append(target_coverage)
-            else:
-                return None
+            coverage_vector.append(target_coverage)
 
         return coverage_vector
 
@@ -166,33 +177,34 @@ class CoverageMatrix(object):
 
         starting_message = '\nCreating coverage_matrix with {} subjects'.format(file_count)
         timing_fields = util.initiate_timer(message=starting_message, add_counts=True, logger=self.logger,
-                                            total_counts=file_count, count_steps=3 if file_count > 100 else None)
+                                            total_counts=file_count, count_steps=15 if file_count > 100 else None)
 
         # Iterate over all the provided bamfile paths and create the coverage_matrix
         for bamfile_path in bamfile_paths:
             if not os.path.exists(bamfile_path):
                 util.stop_err('The bamfile path {} does not exist'.format(bamfile_path))
+
             bamfile = pysam.AlignmentFile(bamfile_path, 'rb')
-            if bamfile.has_index():
-                date_modified = os.path.getmtime(bamfile_path)
+            if not bamfile.has_index():
+                util.stop_err('{} is missing an index'.format(bamfile_path))
 
-                # Get identifying sample info
-                bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
-                sample_info = self.get_sample_info(bamfile.header['RG'][0], bwa_version, date_modified)
+            # Get identifying info for each subject
+            date_modified = os.path.getmtime(bamfile_path)
+            subject_info = self.get_subject_info(bamfile, date_modified, base_headers)
 
-                # Get subject coverage info
-                subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
-                if subj_coverage_vector is not None:
-                    unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals)
-                    full_subj_vector = sample_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
-                    if len(full_subj_vector) != len(full_headers):
-                        util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
+            # Get subject coverage vector
+            subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
+            if subj_coverage_vector.count(0) * 2 > len(targets):
+                self.logger.warning('{} is missing coverage for more than half of its targets'.format(subject_info[1]))
 
-                    coverage_matrix.append(full_subj_vector)
-                else:
-                    self.logger.warning('{} does not have coverage for every target, and is thus not being included in the coverage_matrix'.format(sample_info[1]))
-            else:
-                self.logger.warning('{} is missing an index'.format(bamfile_path))
+            # Get counts of reads in unique panel regions
+            unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals)
+
+            # Create subject row with all needed info for the subject, and add to the coverage_matrix
+            full_subj_vector = subject_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
+            if len(full_subj_vector) != len(full_headers):
+                util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
+            coverage_matrix.append(full_subj_vector)
 
             util.get_timing(timing_fields, display_counts=True)
 
