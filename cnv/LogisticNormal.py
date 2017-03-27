@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-import scipy
+import scipy.optimize
 
 # note that the log-likelihood here is negative since we want to maximize it
 # initial reshaping and flattening at end of each function are for compatibility with scipy.optimize.fmin_cg

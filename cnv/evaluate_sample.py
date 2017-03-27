@@ -1,4 +1,5 @@
 import sys
+
 import logging
 import pickle
 import numpy as np
@@ -33,7 +34,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     logging.info("Running sample training.")
 
     # Read the targets file.
-    with open(targetsFile, 'w') as f:
+    with open(targetsFile) as f:
         targets = pickle.load(f)
 
     # Read the coverageMatrixFile.
@@ -50,7 +51,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     # Run some sanity checks.
     errors = 0
     # Could use a more formal method of obtaining target names.
-    targetCols = filter(coverage_df.keys(), lambda key: key.startswith('Ex'))
+    targetCols = filter(lambda key: key.startswith('Ex'), coverage_df.keys())
     for index, subject in coverage_df.iterrows():
         # Every subject has coverage for every target.
         for targetCol in targetCols:
@@ -70,7 +71,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     hln_parameters = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
-        hln_parameters.parameters.dump(f)
+        hln_parameters.dump(f)
 
 if __name__ ==  '__main__':
     main()
