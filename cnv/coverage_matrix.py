@@ -3,8 +3,8 @@ import pysam
 import pandas as pd
 from mando import command, main
 
-from genepeeks.common import utilities as util
 import utilities as cnv_util
+from genepeeks.common import utilities as util
 
 """ Only count reads that pass all of the following checks """
 list_of_checks = [
