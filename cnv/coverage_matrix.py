@@ -1,10 +1,11 @@
 import os
-import pysam
+
 import pandas as pd
+import pysam
+from genepeeks.common import utilities as util
 from mando import command, main
 
-import utilities as cnv_util
-from genepeeks.common import utilities as util
+from . import utilities as cnv_util
 
 """ Only count reads that pass all of the following checks """
 list_of_checks = [
