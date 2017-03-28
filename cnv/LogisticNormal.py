@@ -4,7 +4,7 @@ import scipy.optimize
 
 # note that the log-likelihood here is negative since we want to maximize it
 # initial reshaping and flattening at end of each function are for compatibility with scipy.optimize.fmin_cg
-def loglike_vcond(z, n, edf, mu, inv_cov):
+def _loglike_vcond(z, n, edf, mu, inv_cov):
     """Calculates the negative log likelihood of z (v in our notation above) conditional on the data and current values of
     mu and cov"""
     z = z.reshape((-1,1))
@@ -15,16 +15,17 @@ def loglike_vcond(z, n, edf, mu, inv_cov):
     return neg_loglike[0][0]
 
 # gradient of the conditional log-likelihood
-def grad_vcond(z, n, edf, mu, inv_cov):
+def _grad_vcond(z, n, edf, mu, inv_cov):
     z = z.reshape((-1,1))
-    pz = np.exp(z - np.amax(z))
-    pz = pz / (np.exp(-np.amax(z)) + np.sum(pz))
+    max_z = np.amax(z)
+    pz = np.exp(z - max_z)
+    pz = pz / (np.exp(-max_z) + np.sum(pz))
 
     grad = -(n * (edf - pz) - np.dot(inv_cov,(z - mu)))
     return grad.flatten()
 
 # based on matlab code from https://www.mathworks.com/matlabcentral/fileexchange/11275-hlnfit
-def conditional_mode(y, mu, cov, EMiter, initialz):
+def _conditional_mode(y, mu, cov, EMiter, initialz):
     """Calculates the conditional mode of z (v above) given data for a single individual and current estimates
     of mu and cov
     y -- kx1 array of read counts in each exon for single individual (histogram of multinomial draws)
@@ -53,7 +54,7 @@ def conditional_mode(y, mu, cov, EMiter, initialz):
     # authors use previously implemented code for Polak-Ribiere -- instead of recreating, we use
     # the scipy implemented version here
     args = (n, edf, mu, inv_cov)
-    z = scipy.optimize.fmin_cg(loglike_vcond, z, fprime=grad_vcond, args=args, maxiter=20, disp=0).reshape((-1, 1))
+    z = scipy.optimize.fmin_cg(_loglike_vcond, z, fprime=_grad_vcond, args=args, maxiter=20, disp=0).reshape((-1, 1))
     z_cg = z
 
     # Newton-raphson after coarse optimization with Polak-Ribiere
@@ -62,8 +63,9 @@ def conditional_mode(y, mu, cov, EMiter, initialz):
         oldz = z
 
         # note the addition of the final dimension (stays constant at 0)
-        pz = np.exp(z - np.amax(z))
-        pz = pz / (np.exp(-np.amax(z)) + np.sum(pz))
+        max_z = np.amax(z)
+        pz = np.exp(z - max_z)
+        pz = pz / (np.exp(-max_z) + np.sum(pz))
 
         # gradient with respect to unnormalized intensities (z vector)
         grad = n * (edf - pz) - np.dot(inv_cov, (z - mu))
@@ -116,7 +118,7 @@ def hln_EM(Y, max_iterations=25, tol=1e-6):
 
         # for each subject
         for i in range(m):
-            mu_hat[:, i:i+1], cov_hat[:, :, i], per_doc_loglikes[i]= conditional_mode(Y[i, :], mu, cov,
+            mu_hat[:, i:i+1], cov_hat[:, :, i], per_doc_loglikes[i]=_conditional_mode(Y[i, :], mu, cov,
                                                                                       iters, mu_hat[:, i])
 
         # update based on maximization with normal approximation
@@ -139,7 +141,7 @@ def gen_hln_samples(numdocs, numdraws, mu, cov):
     X = X / X.sum(axis=1)[:, None]  # add the extra dimension so matrix division returns properly
 
     Y = np.zeros((numdocs, len(mu)+1))
-    for i in range(len(X)):
-        Y[i] = np.random.multinomial(numdraws, X[i])
+    for i, x in enumerate(X):
+        Y[i] = np.random.multinomial(numdraws, x)
 
     return Y, X
