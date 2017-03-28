@@ -1,5 +1,5 @@
 import os
-import cpickle
+import cPickle
 import pandas as pd
 import pysam
 from genepeeks.common import utilities as util
@@ -238,7 +238,7 @@ def run_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', 
     targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
     if targetfile:
         with open(targetfile, 'w') as f:
-            cpickle.dump(targets, f)
+            cPickle.dump(targets, f)
 
     matrix_instance = CoverageMatrix(min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)

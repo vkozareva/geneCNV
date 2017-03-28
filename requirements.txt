@@ -1,4 +1,3 @@
-cpickle
 git+ssh://git@github.com/GenePeeks/biorest.git@master
 git+ssh://git@github.com/GenePeeks/genepeeks-science.git@develop
 mando==0.4

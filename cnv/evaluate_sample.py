@@ -1,7 +1,7 @@
 import sys
 
 import logging
-import cpickle
+import cPickle
 import numpy as np
 import pandas as pd
 from mando import main
@@ -35,7 +35,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
 
     # Read the targets file.
     with open(targetsFile) as f:
-        targets = cpickle.load(f)
+        targets = cPickle.load(f)
 
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
@@ -44,7 +44,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     coverage_df['date'] = coverage_df.date_modified.dt.date
 
     # Log the list of subjects actually used, with ratios, and perhaps some other stats.
-    logging.info('Subjects trained:\n{}'.format(coverage_df[['id', 'date', 'gender', 'tsid_ratio']]))
+    logging.info('Subjects trained:\n{}'.format(coverage_df[['id', 'date', 'gender', 'TSID_ratio']]))
 
     # Run some sanity checks.
     errors = 0
@@ -53,22 +53,24 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     for index, subject in coverage_df.iterrows():
         # Every subject has coverage for every target.
         for targetCol in targetCols:
-            if subject[targetCol] == 0:
-                logging.error('Subject {} is missing coverage for {}.'.format(subject['id'], targetCol))
+            if targetCol not in subject:
+                logging.error('Subject {} is missing target {}.'.format(subject['id'], targetCol))
+                errors += 1
+            elif subject[targetCol] == 0:
+                logging.error('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
                 errors += 1
     if errors > 0:
         sys.exit(1)
 
     # Compute the logistic normal hyperparameters.
     # Omit the non-target columns.
-    coverage_grouped_df = coverage_df.groupby('subject').loc(targetCols).sum()
-    mu, covariance = hln_EM(np.array(coverage_grouped_df.values).astype(float), max_iterations=75, tol=1e-11)
+    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=75, tol=1e-11)
 
     # Pickle the intervals and hyperparameters into the outputFile.
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     hln_parameters = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
-        cpickle.dump(hln_parameters, f)
+        cPickle.dump(hln_parameters, f)
 
 if __name__ ==  '__main__':
     main()
