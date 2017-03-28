@@ -133,9 +133,9 @@ def hln_EM(Y, max_iterations=25, tol=1e-6):
     return mu, cov
 
 
-# Belongs in the test code:
 def gen_hln_samples(numdocs, numdraws, mu, cov):
-    """Generate probability vectors for multinomial distributions from hierarchical logistic normal model"""
+    """Generate probability vectors for multinomial distributions from hierarchical logistic normal model
+    Not part of the training flow, but useful for testing and experimentation."""
     X = np.exp(np.random.multivariate_normal(mu, cov, numdocs))
     X = np.concatenate((X, np.ones((numdocs, 1))), axis=1)
     X = X / X.sum(axis=1)[:, None]  # add the extra dimension so matrix division returns properly
