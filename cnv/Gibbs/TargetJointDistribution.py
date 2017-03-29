@@ -1,6 +1,5 @@
 import numpy as np
 import logging
-from IntensitiesDistribution import IntensitiesDistribution
 from CopyNumberDistribution import CopyNumberDistribution
 
 class TargetJointDistribution(object):
@@ -8,15 +7,9 @@ class TargetJointDistribution(object):
        Includes methods for calculating unnormalized log likelihood of joint distribution given data
        and sampling both intensity and ploidy for single target conditional on other targets. """
 
-    def __init__(self, targets, mu, covariance, data=None, support=None, exclude_covar=False):
-        """Initialize the data to hold past and current samples of ploidy levels for all values in targets."""
-        # isinstance(targets, TargetCollection)
+    def __init__(self, mu, covariance, support, data=None, exclude_covar=False):
         self.data = data
-        if support is not None:
-            self.support = support
-        else:
-            self.support = [1, 2, 3]
-
+        self.support = support
         self.exclude_covar = exclude_covar
 
         # compute all inverted components for conditional covariance one time upfront
@@ -35,7 +28,7 @@ class TargetJointDistribution(object):
         self.covariance = np.diag(np.diagonal(covariance)) if self.exclude_covar else covariance
         self.mu_full = np.concatenate((mu.flatten(), [0]))
         self.inv_covariance_full = np.concatenate((np.concatenate((np.linalg.inv(self.covariance), np.zeros((1,len(self.covariance)))), axis=0),
-                                                np.zeros((len(self.covariance)+1,1))), axis=1)
+                                                   np.zeros((len(self.covariance)+1,1))), axis=1)
 
     def sample(self, copies, intensities, target_index):
         """Given a current set of intensities, and the current ploidy state maintained in this class,
@@ -67,7 +60,7 @@ class TargetJointDistribution(object):
             jump_proposed = 0
             jump_previous = 0
 
-        # calculate log joint likelihood
+        # calculate unnormalized log joint likelihood
         joint_proposed = self.log_joint_likelihood(copies_proposed, intensities_proposed)
         joint_previous = self.log_joint_likelihood(copies, intensities)
 

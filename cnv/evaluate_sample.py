@@ -31,7 +31,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     logging.info("Running evaluate samples")
 
     # Read the parameters file.
-    hln_parameters = pickle.load(open(parametersFile, 'rb'))
+    hln_parameters = cPickle.load(open(parametersFile, 'rb'))
     targets = hln_parameters.targets
 
     # Parse subject bamfile
@@ -62,9 +62,6 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
             high_copy = np.argmax(copy_posteriors[target_i])
             high_posterior = copy_posteriors[target_i][high_copy]
             logging.info('{} has a posterior probability of {} of having {} copies'.format(target_columns[target_i], high_posterior, cnv_support[high_copy]))
-
-
-
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile):
