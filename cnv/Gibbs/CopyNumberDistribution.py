@@ -1,5 +1,4 @@
 import numpy as np
-from cnv.Targets.TargetCollection import TargetCollection
 
 class CopyNumberDistribution(object):
     """Describe the distribution of ploidy across a set of targets.
