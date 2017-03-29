@@ -35,7 +35,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     targets = hln_parameters.targets
 
     # Parse subject bamfile
-    subject_df = CoverageMatrix().create_coverage_matrix([subjectBamfilePath], targets)
+    subject_df = CoverageMatrix(False).create_coverage_matrix([subjectBamfilePath], targets)
     subject_id = subject_df['subject'][0]
     # get 'normal' copy number based on whether subject is male or female
     norm_copy_num = 1 if subject_id[0] == 'M' else 2
