@@ -8,19 +8,21 @@ from mando import command, main
 from . import utilities as cnv_util
 
 """ Only count reads that pass all of the following checks """
-def list_of_checks(is_remove_pcr_duplicates):
+def list_of_checks(remove_pcr_duplicates):
     return (
-        [(lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
-         (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60'),]
-        + ([(lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate')] if is_remove_pcr_duplicates else [])
-        + [(lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
-           (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
-           (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
-           (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
-           # To ensure that no read pairs overlap multiple targets, skip all reads with
-           # insert length greater than the distance used to merge intervals
-           (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
-           (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end'),
+         [(lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
+          (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60')]
+         +
+         ([(lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate')] if remove_pcr_duplicates else [])
+         +
+         [(lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
+          (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
+          (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
+          (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
+          # To ensure that no read pairs overlap multiple targets, skip all reads with
+          # insert length greater than the distance used to merge intervals
+          (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
+          (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end')
        ])
 
 
@@ -35,10 +37,10 @@ def passes_checks(read, insert_length, is_remove_pcr_duplicates, max_insert_leng
 
 
 class CoverageMatrix(object):
-    def __init__(self, is_remove_pcr_duplicates, min_interval_separation=629):
+    def __init__(self, remove_pcr_duplicates, min_interval_separation=629):
         super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
-        self.is_remove_pcr_duplicates = is_remove_pcr_duplicates
+        self.remove_pcr_duplicates = remove_pcr_duplicates
         self.min_interval_separation = min_interval_separation
 
     def get_unique_panel_intervals(self, print_counts=True):
@@ -138,7 +140,7 @@ class CoverageMatrix(object):
                     insert_length *= -1
 
                 # Only count reads that pass the necessary quality checks, and keep counts of those that don't
-                if passes_checks(read, insert_length, self.is_remove_pcr_duplicates, self.min_interval_separation, skipped_counts):
+                if passes_checks(read, insert_length, self.remove_pcr_duplicates, self.min_interval_separation, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
                     # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
