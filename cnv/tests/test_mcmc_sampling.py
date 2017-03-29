@@ -22,7 +22,7 @@ Test plan:
             Today the intensity model is uniform but in the future it will be a real model.
             Run Gibbs sampling on the reads to identify most probable copy numbers.
             Sampling results should be idential to the random copy numbers.
-        
+
         Test with actual subject data (not done)
             Commit a set of intensity model hyperparameters.
             Extract the coverage matrices from a set of test subjects and commit those.
@@ -33,9 +33,13 @@ Test plan:
 
 import sys, os, unittest, logging
 import numpy as np
-import pandas as pd
+import cPickle
 from cnv.Gibbs.IntensitiesDistribution import IntensitiesDistribution
+from cnv.Gibbs.CopyNumberDistribution import CopyNumberDistribution
 from cnv.Gibbs.PloidyModel import PloidyModel
+from cnv.hln_parameters import HLN_Parameters
+
+from test_resources import *
 
 
 class TestPloidyModel(unittest.TestCase):
@@ -45,27 +49,32 @@ class TestPloidyModel(unittest.TestCase):
 
     def test_01_random_data(self):
         """Generate a random copy number vector with uniform distribution over support.
-        Compute a fixed intensity vector which is uniform.
+        Generate random intensity vector from prior (using test parameters).
         Use multinomial to generate counts that reflect that distribution.
-        Gibbs sample the posterior of the prior + data generated from the prior.
+        MCMC sample the posterior of the prior + data generated from the prior.
         Compare the converged posterior probabilities with the random copy numbers.
         The copy number with the highest probability for each exon should be the initial random copy number."""
 
-        n_targets = 78
         n_draws = 20000
         cnv_support = [1, 2, 3]
-        copy_numbers = np.random.choice(cnv_support, n_targets)
+
+        # loading the params as a dict here because for pickled user class instances
+        # cPickle requires the class to be on the same directory level as when instance was pickled
+        test_hln_params = cPickle.load(open(TEST_HLN_PARAMS, 'rb'))
+        n_targets = len(test_hln_params['targets'])
+        test_params = HLN_Parameters(test_hln_params['targets'], test_hln_params['mu'], test_hln_params['covariance'])
+
+        copy_numbers = CopyNumberDistribution(n_targets, support=cnv_support).sample_prior()
         logging.info('Initial target copy numbers: {}'.format(copy_numbers))
-        intensities = np.ones(n_targets)/n_targets
-        p_vector = copy_numbers * intensities
+        intensities = IntensitiesDistribution(test_params.mu, test_params.covariance).sample()
+        p_vector = np.multiply(copy_numbers, np.exp(intensities))
         p_vector /= float(np.sum(p_vector))
 
-        ploidy = PloidyModel(cnv_support, cnv=copy_numbers,
-                             data=np.random.multinomial(n_draws, p_vector), intensities=intensities)
-        ploidy.RunGibbsSampler()
-        gibbs_data_results, gibbs_df = ploidy.ReportGibbsData()
-        self.assertEqual([ploidy.cnv_support[np.where(gibbs_target_result==max(gibbs_target_result))[0][0]]
-                          for gibbs_target_result in gibbs_data_results],
+        ploidy_instance = PloidyModel(cnv_support, test_params, data=np.random.multinomial(n_draws, p_vector))
+        ploidy_instance.RunMCMC()
+        copy_posteriors = ploidy_instance.ReportMCMCData()
+        self.assertEqual([ploidy_instance.cnv_support[np.where(mcmc_target_result==max(mcmc_target_result))[0][0]]
+                          for mcmc_target_result in copy_posteriors],
                          list(copy_numbers))
 
 
