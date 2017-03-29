@@ -26,9 +26,9 @@ def list_of_checks(remove_pcr_duplicates):
        ])
 
 
-def passes_checks(read, insert_length, is_remove_pcr_duplicates, max_insert_length, skipped_counts):
+def passes_checks(read, insert_length, remove_pcr_duplicates, max_insert_length, skipped_counts):
     """ Only count reads that pass the necessary quality checks, and keep counts of those that don't """
-    for check, check_name in list_of_checks(is_remove_pcr_duplicates):
+    for check, check_name in list_of_checks(remove_pcr_duplicates):
         if check(read, insert_length, max_insert_length):
             if skipped_counts is not None:
                 util.add_to_dict(skipped_counts, check_name)
