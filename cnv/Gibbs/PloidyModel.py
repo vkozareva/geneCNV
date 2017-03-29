@@ -5,6 +5,7 @@ import numpy as np
 
 from IntensitiesDistribution import IntensitiesDistribution
 from TargetJointDistribution import TargetJointDistribution
+from CopyNumberDistribution import CopyNumberDistribution
 
 class PloidyModel(object):
     """This is the full statistical model and class that runs the Metropolis Hastings sampling scheme. It is responsible for taking a
