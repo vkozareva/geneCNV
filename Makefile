@@ -1,7 +1,8 @@
 # Generate emacs TAGS files that indexes relevant source files.
 
 SOURCE_FILE_MATCH = \
-	"(" -type d -a "(" -name "bams" -o -name "build" -o -name "obj" -o -name "bin" -o -name ".git" \
+	"(" -type d -a "(" -name "bams" -o -name ".ipynb_checkpoints" -o -name "build" -o -name "dist" \
+			-o -name "obj" -o -name "bin" -o -name ".git" \
 			")" -a \! -prune ")" \
 	-o \! "(" -type d -o -type l \
 		-o -name "*.odt" \

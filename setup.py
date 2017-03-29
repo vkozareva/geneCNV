@@ -31,6 +31,6 @@ setup(name='cnv',
       dependency_links=['git+ssh://git@github.com/GenePeeks/genepeeks-science.git@develop#egg=genepeeks',
                         'git+ssh://git@github.com/GenePeeks/biorest.git@master#egg=biorest'],
       entry_points={
-          'console_scripts': ['cnv=cnv.evaluate_sample:main', 'create_matrix=cnv.coverage_matrix:main']
+          'console_scripts': ['cnv=cnv.evaluate_sample:main', 'coverage_matrix=cnv.coverage_matrix:main']
       },
       zip_safe=False)

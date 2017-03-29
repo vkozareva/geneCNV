@@ -67,7 +67,8 @@ class TargetJointDistribution(object):
         log_test_ratio = joint_proposed + jump_previous - joint_previous - jump_proposed
 
         # sample for new joint state and keep track of acceptance
-        jump_chance = min(1.0, np.exp(log_test_ratio))
+        # Prevent overflow in exp for large ratios.
+        jump_chance = min(1.0, np.exp(log_test_ratio)) if log_test_ratio < 0 else 1.0
         if np.random.rand() < jump_chance:
             return copy_proposed, intensity_proposed, 1.0
         else:

@@ -8,10 +8,10 @@ from mando import main
 from mando import command
 
 from coverage_matrix import CoverageMatrix
-from Gibbs.PloidyModel import PloidyModel
+from MCMC.PloidyModel import PloidyModel
 from LogisticNormal import hln_EM
 from hln_parameters import HLN_Parameters
-from Gibbs.VisualizeMCMC import VisualizeMCMC
+from MCMC.VisualizeMCMC import VisualizeMCMC
 
 
 #pylint: disable=unused-argument

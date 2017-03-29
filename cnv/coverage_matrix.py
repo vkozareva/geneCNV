@@ -8,11 +8,11 @@ from mando import command, main
 from . import utilities as cnv_util
 
 """ Only count reads that pass all of the following checks """
-def list_of_checks(remove_pcr_duplicates):
+def list_of_checks(is_remove_pcr_duplicates):
     return (
         [(lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
          (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60'),]
-        + ([(lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate')] if remove_pcr_duplicates else [])
+        + ([(lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate')] if is_remove_pcr_duplicates else [])
         + [(lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
            (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
            (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
@@ -24,9 +24,9 @@ def list_of_checks(remove_pcr_duplicates):
        ])
 
 
-def passes_checks(read, insert_length, remove_pcr_duplicates, max_insert_length, skipped_counts):
+def passes_checks(read, insert_length, is_remove_pcr_duplicates, max_insert_length, skipped_counts):
     """ Only count reads that pass the necessary quality checks, and keep counts of those that don't """
-    for check, check_name in list_of_checks(remove_pcr_duplicates):
+    for check, check_name in list_of_checks(is_remove_pcr_duplicates):
         if check(read, insert_length, max_insert_length):
             if skipped_counts is not None:
                 util.add_to_dict(skipped_counts, check_name)
@@ -35,10 +35,10 @@ def passes_checks(read, insert_length, remove_pcr_duplicates, max_insert_length,
 
 
 class CoverageMatrix(object):
-    def __init__(self, remove_pcr_duplicates, min_interval_separation=629):
+    def __init__(self, is_remove_pcr_duplicates, min_interval_separation=629):
         super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
-        self.remove_pcr_duplicates = remove_pcr_duplicates
+        self.is_remove_pcr_duplicates = is_remove_pcr_duplicates
         self.min_interval_separation = min_interval_separation
 
     def get_unique_panel_intervals(self, print_counts=True):
@@ -138,7 +138,7 @@ class CoverageMatrix(object):
                     insert_length *= -1
 
                 # Only count reads that pass the necessary quality checks, and keep counts of those that don't
-                if passes_checks(read, insert_length, self.remove_pcr_duplicates, self.min_interval_separation, skipped_counts):
+                if passes_checks(read, insert_length, self.is_remove_pcr_duplicates, self.min_interval_separation, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
                     # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
@@ -222,8 +222,8 @@ class CoverageMatrix(object):
         return coverage_df
 
 
-@command('run-matrix')
-def run_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', remove_pcr_duplicates=False, min_dist=629):
+@command('create-matrix')
+def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', remove_pcr_duplicates=False, min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
