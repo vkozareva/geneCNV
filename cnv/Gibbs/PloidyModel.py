@@ -1,4 +1,4 @@
-"""The main Gibbs Sampling Model """
+"""The main Metropolis Hastings Model """
 
 import logging
 import numpy as np
@@ -8,13 +8,16 @@ from CopyNumberDistribution import CopyNumberDistribution
 from TargetJointDistribution import TargetJointDistribution
 
 class PloidyModel(object):
-    """This is the full statistical model and class that runs the Gibbs Sampling. It is responsible for taking a
-    parameter set, a BAM file, and a TargetCollection and running a Gibbs sampler to determine the
-    posterior probability of different ploidy states."""
+    """This is the full statistical model and class that runs the Metropolis Hastings sampling scheme. It is responsible for taking a
+    parameter set, subject data, and copy number support and running MCMC to determine the
+    posterior probability of different ploidy states.
+    cnv_support -- array-like containing the different possible ploidy states (ints)
+    hln_parameters -- instance of HLN_Parameters containing mu (array), covariance (matrix), and targets(list)
+    """
 
-    def __init__(self, cnv_support, hln_parameters, data=None, intensities=None, exclude_covar=False):
+    def __init__(self, cnv_support, hln_parameters, data=None, ploidy=None, intensities=None, exclude_covar=False):
         """Initialize the data model with its input arguments.
-        Load the parameters and calculate the coverage at each interval in the BAM file."""
+        Load the parameters and initialize starting states as necessary."""
 
         self.mu = hln_parameters.mu
         self.covariance = hln_parameters.covariance
@@ -26,9 +29,7 @@ class PloidyModel(object):
 
         # initialize values
         self.intensities = IntensitiesDistribution(self.mu, self.covariance).sample() if intensities is None else intensities
-        # self.ploidy = CopyNumberDistribution(self.n_targets, support=self.cnv_support).sample_prior()
-        # until normalization against other genes, initializing with most probable normal state
-        self.ploidy = 2.0 * np.ones(self.n_targets)
+        self.ploidy = CopyNumberDistribution(self.n_targets, support=self.cnv_support).sample_prior() if ploidy is None else ploidy
 
         # initialize joint distribution with data and parameters
         self.joint_target = TargetJointDistribution(self.mu, self.covariance, self.cnv_support, self.data,

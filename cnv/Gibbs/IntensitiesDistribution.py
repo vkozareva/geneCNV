@@ -6,7 +6,7 @@ class IntensitiesDistribution(object):
         self.mu = mu
         self.covariance = covariance
 
-    def sample(self, data=None):
+    def sample(self):
         """Given a current ploidy state, and an internally maintained vector of current intensities, sample a
         new intensity vector.  This will be a no-op until we can better define the model."""
         intensities = np.concatenate((np.random.multivariate_normal(self.mu.flatten(), self.covariance), [0]))

@@ -20,8 +20,8 @@ from Gibbs.VisualizeMCMC import VisualizeMCMC
 def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, exclude_covar=False, norm_cutoff=0.3):
     """Test for copy number variation in a given sample
 
-    :param subjectBamfilePath: The ID of the subject
-    :param parametersFile: The files with the model parameters
+    :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
+    :param parametersFile: Pickled file containing an instance of HLN_Parameters (mu, covariance, targets)
     :param outputFile: Output file name
     :param n_iterations: The number of MCMC iterations desired
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
@@ -44,8 +44,10 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     # add option to expand this support later?
     cnv_support = [1, 2, 3]
+    # until normalization against other genes, initializing with most probable normal state
+    initial_ploidy = 2.0 * np.ones(len(targets))
 
-    ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, exclude_covar=exclude_covar)
+    ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, ploidy=initial_ploidy, exclude_covar=exclude_covar)
     ploidy_model.RunMCMC(n_iterations)
     copy_posteriors = ploidy_model.ReportMCMCData()
 
