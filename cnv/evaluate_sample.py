@@ -111,7 +111,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     hln_parameters = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
-        cPickle.dump(hln_parameters, f)
+        cPickle.dump(hln_parameters, f, protocol = cPickle.HIGHEST_PROTOCOL)
 
 if __name__ ==  '__main__':
     main()
