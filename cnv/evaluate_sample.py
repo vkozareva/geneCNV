@@ -22,7 +22,8 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
     :param parametersFile: Pickled file containing an instance of HLN_Parameters (mu, covariance, targets)
-    :param outputFile: Output file name
+    :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
+                       and one .pdf displaying stacked bar chart)
     :param n_iterations: The number of MCMC iterations desired
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
@@ -51,19 +52,21 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     ploidy_model.RunMCMC(n_iterations)
     copy_posteriors = ploidy_model.ReportMCMCData()
 
-    mcmc_df = pd.DataFrame(copy_posteriors, columns=['copy_{}'.format(cnv) for cnv in cnv_support])
+    mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
     mcmc_df['Target'] = target_columns
-    # do we want to print this dataframe to a csv or output file? -- otherwise I can just remove it
+    mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
 
     visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors)
-    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), outputFile)
+    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
 
     for target_i in xrange(len(copy_posteriors)):
         norm_i = cnv_support.index(norm_copy_num)
         if copy_posteriors[target_i][norm_i] < norm_cutoff:
             high_copy = np.argmax(copy_posteriors[target_i])
             high_posterior = copy_posteriors[target_i][high_copy]
-            logging.info('{} has a posterior probability of {} of having {} copies'.format(target_columns[target_i], high_posterior, cnv_support[high_copy]))
+            logging.info('{} has a posterior probability of {} of having {} copies'.format(target_columns[target_i],
+                                                                                           high_posterior, cnv_support[high_copy]))
+
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile):
