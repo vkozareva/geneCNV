@@ -7,21 +7,63 @@ import pandas as pd
 from mando import main
 from mando import command
 
+from coverage_matrix import CoverageMatrix
+from Gibbs.PloidyModel import PloidyModel
 from LogisticNormal import hln_EM
 from hln_parameters import HLN_Parameters
+from Gibbs.VisualizeMCMC import VisualizeMCMC
 
 
 #pylint: disable=unused-argument
 
 @command('evaluate-sample')
-def evaluate_sample(subjectID, parametersFile, outputFile):
+def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, exclude_covar=False, norm_cutoff=0.3):
     """Test for copy number variation in a given sample
 
-    :param subjectID: The ID of the subjectparametersFile: The files with the model parameters
-    :param outputFile: Output file name.
+    :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
+    :param parametersFile: Pickled file containing an instance of HLN_Parameters (mu, covariance, targets)
+    :param outputFile: Output file name
+    :param n_iterations: The number of MCMC iterations desired
+    :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
+    :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
     """
     logging.info("Running evaluate samples")
+
+    # Read the parameters file.
+    hln_parameters = cPickle.load(open(parametersFile, 'rb'))
+    targets = hln_parameters.targets
+
+    # Parse subject bamfile
+    subject_df = CoverageMatrix().create_coverage_matrix([subjectBamfilePath], targets)
+    subject_id = subject_df['subject'][0]
+    # get 'normal' copy number based on whether subject is male or female
+    norm_copy_num = 1 if subject_id[0] == 'M' else 2
+    target_columns = [target['label'] for target in targets]
+    subject_data = subject_df[target_columns].values.astype('float')
+
+    # add option to expand this support later?
+    cnv_support = [1, 2, 3]
+    # until normalization against other genes, initializing with most probable normal state
+    initial_ploidy = 2.0 * np.ones(len(targets))
+
+    ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, ploidy=initial_ploidy, exclude_covar=exclude_covar)
+    ploidy_model.RunMCMC(n_iterations)
+    copy_posteriors = ploidy_model.ReportMCMCData()
+
+    mcmc_df = pd.DataFrame(copy_posteriors, columns=['copy_{}'.format(cnv) for cnv in cnv_support])
+    mcmc_df['Target'] = target_columns
+    # do we want to print this dataframe to a csv or output file? -- otherwise I can just remove it
+
+    visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors)
+    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), outputFile)
+
+    for target_i in xrange(len(copy_posteriors)):
+        norm_i = cnv_support.index(norm_copy_num)
+        if copy_posteriors[target_i][norm_i] < norm_cutoff:
+            high_copy = np.argmax(copy_posteriors[target_i])
+            high_posterior = copy_posteriors[target_i][high_copy]
+            logging.info('{} has a posterior probability of {} of having {} copies'.format(target_columns[target_i], high_posterior, cnv_support[high_copy]))
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile):
@@ -69,7 +111,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     hln_parameters = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
-        cPickle.dump(hln_parameters, f)
+        cPickle.dump(hln_parameters, f, protocol = cPickle.HIGHEST_PROTOCOL)
 
 if __name__ ==  '__main__':
     main()
