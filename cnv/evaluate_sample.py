@@ -48,7 +48,6 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
 
     # Run some sanity checks.
     errors = 0
-    # Could use a more formal method of obtaining target names.
     targetCols = [target['label'] for target in targets]
     for index, subject in coverage_df.iterrows():
         # Every subject has coverage for every target.
@@ -64,7 +63,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
 
     # Compute the logistic normal hyperparameters.
     # Omit the non-target columns.
-    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=75, tol=1e-11)
+    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=150, tol=1e-11)
 
     # Pickle the intervals and hyperparameters into the outputFile.
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
