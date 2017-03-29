@@ -17,4 +17,4 @@ test:
     - pylint cnv
     - nosetests cnv
     - cnv evaluate-sample -h
-    - coverage_matrix create_matrix cnv/tests/data/example.bam
+    - coverage_matrix create-matrix cnv/tests/data/example.bam
