@@ -4,7 +4,6 @@ import logging
 import numpy as np
 
 from IntensitiesDistribution import IntensitiesDistribution
-from CopyNumberDistribution import CopyNumberDistribution
 from TargetJointDistribution import TargetJointDistribution
 
 class PloidyModel(object):
