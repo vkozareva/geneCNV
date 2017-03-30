@@ -1,12 +1,12 @@
 """
-Test code for method of Gibbs Sampling to detect DMD CNVs
+Test code for method of MCMC Sampling to detect DMD CNVs
 
 Proposed production DMD CNV flow:
     Training
         Compute a set of intensity model hyperparameters from all female subjects run with desired TSO/TSID ratios.
     Per subject
         Create the coverage matrix for the subject.
-        Run Gibbs Sampling on that data using the intensity model to estimate exon copy numbers.
+        Run MCMC Sampling on that data using the intensity model to estimate exon copy numbers.
 
 Test plan:
     Training (not done)
@@ -15,12 +15,12 @@ Test plan:
         Train H2 hyperparameters on the synthetic subject draws.
         Show that as r increases H2 converges on H1.
 
-    Gibbs sampling
+    MCMC sampling
         Random test (done, w/o intensity model)
             Compute a set of random copy numbers.
             Draw synthetic reads based on the copy numbers and intensity model.
             Today the intensity model is uniform but in the future it will be a real model.
-            Run Gibbs sampling on the reads to identify most probable copy numbers.
+            Run MCMC sampling on the reads to identify most probable copy numbers.
             Sampling results should be idential to the random copy numbers.
 
         Test with actual subject data (not done)
@@ -34,9 +34,9 @@ Test plan:
 import sys, os, unittest, logging
 import numpy as np
 import cPickle
-from cnv.Gibbs.IntensitiesDistribution import IntensitiesDistribution
-from cnv.Gibbs.CopyNumberDistribution import CopyNumberDistribution
-from cnv.Gibbs.PloidyModel import PloidyModel
+from cnv.MCMC.IntensitiesDistribution import IntensitiesDistribution
+from cnv.MCMC.CopyNumberDistribution import CopyNumberDistribution
+from cnv.MCMC.PloidyModel import PloidyModel
 from cnv.hln_parameters import HLN_Parameters
 
 from test_resources import *
@@ -55,7 +55,7 @@ class TestPloidyModel(unittest.TestCase):
         Compare the converged posterior probabilities with the random copy numbers.
         The copy number with the highest probability for each exon should be the initial random copy number."""
 
-        n_draws = 20000
+        n_draws = 40000
         cnv_support = [1, 2, 3]
 
         # loading the params as a dict here because for pickled user class instances

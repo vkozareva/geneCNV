@@ -7,8 +7,9 @@ from test_resources import EXAMPLE_BAM_PATH
 
 class CoverageMatrixTests(unittest.TestCase):
     min_dist = 629
+    remove_pcr_duplicates = False
     targets = cnv_util.combine_panel_intervals(min_dist=min_dist)
-    matrix_instance = cm.CoverageMatrix(min_interval_separation=min_dist)
+    matrix_instance = cm.CoverageMatrix(remove_pcr_duplicates, min_interval_separation=min_dist)
 
     def test_targets(self):
         for i, target in enumerate(self.targets):

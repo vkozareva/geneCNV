@@ -5,7 +5,7 @@ A repository dedicated to the analysis of the exons that affect Duchennne and Be
 
 This repository is divided into several main sections.
 
-1. The `cnv` folder.  This contains the library code that both trains and runs the Gibbs sampling algorithm to determine if samples contain duplications or deletions in this gene.
+1. The `cnv` folder.  This contains the library code that both trains and runs the MCMC sampling algorithm to determine if samples contain duplications or deletions in this gene.
 2. The `notebooks` folder which contains the analysis scripts and packages we used to develop the algorithm and code base.
 3. The `exon_data` folder, which contains sample data used in the notebooks along with graphics developed during the modeling process.
 

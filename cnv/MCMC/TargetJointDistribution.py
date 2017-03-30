@@ -1,6 +1,6 @@
-import numpy as np
 import logging
-from CopyNumberDistribution import CopyNumberDistribution
+import numpy as np
+
 
 class TargetJointDistribution(object):
     """Describes the joint distribution for hierarchical logistic normal model (with multinomial draws).
@@ -35,8 +35,7 @@ class TargetJointDistribution(object):
         sample a new ploidy state and intensity for a particular target using the prior distribution as the proposal distribution."""
         intensities_proposed = np.copy(intensities)
         copies_proposed = np.copy(copies)
-
-        copy_proposed = CopyNumberDistribution(1, self.support).sample_prior()
+        copy_proposed = np.random.choice(self.support, size=1)
         copies_proposed[target_index] = copy_proposed
 
         # don't update intensity for last target (for identifiability)
@@ -53,8 +52,9 @@ class TargetJointDistribution(object):
             intensities_proposed[target_index] = intensity_proposed
 
             # calculate log likelihood of proposed jump (J(proposed|current state))
-            jump_proposed = -(intensity_proposed - mu_bar) ** 2 / (2 * cov_bar)
-            jump_previous = -(intensities[target_index] - mu_bar) ** 2 / (2 * cov_bar)
+            # Since marginally normal, we just need distance from mean squared
+            jump_proposed = -(((intensity_proposed - mu_bar) ** 2) / (2 * cov_bar))
+            jump_previous = -(((intensities[target_index] - mu_bar) ** 2) / (2 * cov_bar))
         else:
             intensity_proposed = intensities[target_index]
             jump_proposed = 0
@@ -67,8 +67,8 @@ class TargetJointDistribution(object):
         log_test_ratio = joint_proposed + jump_previous - joint_previous - jump_proposed
 
         # sample for new joint state and keep track of acceptance
-        jump_chance = min(1.0, np.exp(log_test_ratio))
-        if np.random.rand() < jump_chance:
+        # Note python's "or" is equivalent to || not |, saving the RNG and exp
+        if log_test_ratio > 0 or np.random.rand() < np.exp(log_test_ratio):
             return copy_proposed, intensity_proposed, 1.0
         else:
             return copies[target_index], intensities[target_index], 0.0

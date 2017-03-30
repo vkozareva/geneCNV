@@ -8,24 +8,27 @@ from mando import command, main
 from . import utilities as cnv_util
 
 """ Only count reads that pass all of the following checks """
-list_of_checks = [
-    (lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
-    (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60'),
-    (lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate'),
-    (lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
-    (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
-    (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
-    (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
-    # To ensure that no read pairs overlap multiple targets, skip all reads with
-    # insert length greater than the distance used to merge intervals
-    (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
-    (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end'),
-]
+def list_of_checks(remove_pcr_duplicates):
+    return (
+         [(lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
+          (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60')]
+         +
+         ([(lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate')] if remove_pcr_duplicates else [])
+         +
+         [(lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
+          (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
+          (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
+          (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
+          # To ensure that no read pairs overlap multiple targets, skip all reads with
+          # insert length greater than the distance used to merge intervals
+          (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
+          (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end')
+       ])
 
 
-def passes_checks(read, insert_length, max_insert_length, skipped_counts):
+def passes_checks(read, insert_length, remove_pcr_duplicates, max_insert_length, skipped_counts):
     """ Only count reads that pass the necessary quality checks, and keep counts of those that don't """
-    for check, check_name in list_of_checks:
+    for check, check_name in list_of_checks(remove_pcr_duplicates):
         if check(read, insert_length, max_insert_length):
             if skipped_counts is not None:
                 util.add_to_dict(skipped_counts, check_name)
@@ -34,9 +37,10 @@ def passes_checks(read, insert_length, max_insert_length, skipped_counts):
 
 
 class CoverageMatrix(object):
-    def __init__(self, min_interval_separation=629):
+    def __init__(self, remove_pcr_duplicates, min_interval_separation=629):
         super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
+        self.remove_pcr_duplicates = remove_pcr_duplicates
         self.min_interval_separation = min_interval_separation
 
     def get_unique_panel_intervals(self, print_counts=True):
@@ -136,7 +140,7 @@ class CoverageMatrix(object):
                     insert_length *= -1
 
                 # Only count reads that pass the necessary quality checks, and keep counts of those that don't
-                if passes_checks(read, insert_length, self.min_interval_separation, skipped_counts):
+                if passes_checks(read, insert_length, self.remove_pcr_duplicates, self.min_interval_separation, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
                     # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
@@ -220,14 +224,15 @@ class CoverageMatrix(object):
         return coverage_df
 
 
-@command('run-matrix')
-def run_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', min_dist=629):
+@command('create-matrix')
+def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', remove_pcr_duplicates=False, min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param targetfile: Path to an output file to contain target intervals as a pickled object.
     :param wanted_gene: Name of the gene for where to get targets from
+    :param remove_pcr_duplicates: Skip reads that are PCR ducplicates.
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
@@ -240,7 +245,7 @@ def run_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', 
         with open(targetfile, 'w') as f:
             cPickle.dump(targets, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-    matrix_instance = CoverageMatrix(min_interval_separation=min_dist)
+    matrix_instance = CoverageMatrix(remove_pcr_duplicates, min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
     if outfile:
         coverage_matrix_df.to_csv(outfile)
