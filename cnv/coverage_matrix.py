@@ -218,7 +218,3 @@ class CoverageMatrix(object):
         for key, count in skipped_counts.items():
             self.logger.info('{} reads were skipped from: {}'.format(count, key))
         return coverage_df
-
-
-
-
