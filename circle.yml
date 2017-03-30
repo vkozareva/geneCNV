@@ -17,4 +17,4 @@ test:
     - pylint cnv
     - nosetests cnv
     - cnv evaluate-sample -h
-    - cnv create-matrix cnv/tests/data/example.bam
+    - cnv create-matrix cnv/tests/data/example.bam --wanted_gene DMD
