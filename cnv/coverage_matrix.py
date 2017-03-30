@@ -1,11 +1,7 @@
 import os
-import cPickle
 import pandas as pd
 import pysam
 from genepeeks.common import utilities as util
-from mando import command, main
-
-from . import utilities as cnv_util
 
 """ Only count reads that pass all of the following checks """
 def list_of_checks(remove_pcr_duplicates):
@@ -222,34 +218,3 @@ class CoverageMatrix(object):
         for key, count in skipped_counts.items():
             self.logger.info('{} reads were skipped from: {}'.format(count, key))
         return coverage_df
-
-
-@command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', remove_pcr_duplicates=False, min_dist=629):
-    """ Create coverage_matrix from given bamfiles_fofn.
-
-    :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
-    :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
-    :param targetfile: Path to an output file to contain target intervals as a pickled object.
-    :param wanted_gene: Name of the gene for where to get targets from
-    :param remove_pcr_duplicates: Skip reads that are PCR ducplicates.
-    :param min_dist: Any two intervals that are closer than this distance will be merged together,
-        and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
-        was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
-
-    """
-    if bamfiles_fofn.endswith('.bam'):
-        bamfiles_fofn = bamfiles_fofn.split(',')
-    targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
-    if targetfile:
-        with open(targetfile, 'w') as f:
-            cPickle.dump(targets, f, protocol=cPickle.HIGHEST_PROTOCOL)
-
-    matrix_instance = CoverageMatrix(remove_pcr_duplicates, min_interval_separation=min_dist)
-    coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
-    if outfile:
-        coverage_matrix_df.to_csv(outfile)
-        print 'Finished creating {}'.format(outfile)
-
-if __name__ == "__main__":
-    main()
