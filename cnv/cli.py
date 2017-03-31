@@ -33,7 +33,10 @@ def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene=None
 
     if bamfiles_fofn.endswith('.bam'):
         bamfiles_fofn = bamfiles_fofn.split(',')
-    if wanted_gene:
+    if wanted_gene and targets_bed_file:
+        logging.error("Both --wanted_gene and --targets_bed_file were specified (only one is allowed).")
+        sys.exit(1)
+    elif wanted_gene:
         targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
     elif targets_bed_file:
         targets = []
@@ -41,7 +44,7 @@ def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene=None
             for line in f:
                 line = line.rstrip('\r\n')
                 chrom, start, end, name = line.split('\t')
-                targets.append({'start': int(start), 'end': int(end), 'label': name})
+                targets.append({'chrom': chrom, 'start': int(start), 'end': int(end), 'label': name})
     else:
         logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
         sys.exit(1)

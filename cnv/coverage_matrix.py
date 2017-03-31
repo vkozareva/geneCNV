@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 import pysam
 from genepeeks.common import utilities as util
@@ -39,7 +40,7 @@ class CoverageMatrix(object):
         self.remove_pcr_duplicates = remove_pcr_duplicates
         self.min_interval_separation = min_interval_separation
 
-    def get_unique_panel_intervals(self, print_counts=True):
+    def get_unique_panel_intervals(self, print_counts=True, panel_chrom='chrX'):
         """ Get the intervals that are unique to each panel """
         panel_intervals = {
             'TSID': {'file': os.path.join(os.path.realpath(os.path.dirname(__file__)), 'inputs', 'TruSight_Inherited_Disease_Manifest_A.bed')},
@@ -48,8 +49,8 @@ class CoverageMatrix(object):
 
         for name, intrv_info in panel_intervals.items():
             df = pd.read_csv(intrv_info['file'], delimiter='\t', header=None, names=('chrom', 'start', 'end', 'id'))
-            X_df = df[df['chrom'] == 'chrX'].sort_values(by='start')
-            intrv_info['intrv_list'] = map(dict, dict(X_df.T).values())
+            filtered_df = df[df['chrom'] == panel_chrom].sort_values(by='start')
+            intrv_info['intrv_list'] = map(dict, dict(filtered_df.T).values())
 
         # For each panel, get the intervals that are in that panel but missing from the other panel
         unique_panel_intervals = {
@@ -63,6 +64,7 @@ class CoverageMatrix(object):
                 self.logger.info('{} only: {} intervals over {} bp'.format(panel, len(unique_intervals), util.add_intervals(unique_intervals)))
             unique_intervals_merged = util.merge_intervals(unique_intervals, min_dist=self.min_interval_separation, print_counts=print_counts)
             for i, intrv in enumerate(unique_intervals_merged):
+                intrv['chrom'] = panel_chrom
                 intrv['label'] = 'unique_{}_Target_{}'.format(panel, i + 1)
             unique_panel_intervals[panel] = unique_intervals_merged
         return unique_panel_intervals
@@ -129,7 +131,8 @@ class CoverageMatrix(object):
         for target in targets:
             read_pairs = {}
             # Scan through all reads in each target, and count the number of unique read pairs
-            for read in bamfile.fetch('X', start=target['start'], end=target['end']):
+            reference = re.sub(r'^chr', '', target['chrom'])
+            for read in bamfile.fetch(reference=reference, start=target['start'], end=target['end']):
                 insert_length = read.template_length
                 # Multiply insert_length by -1 if the read is reverse
                 if read.is_reverse:
