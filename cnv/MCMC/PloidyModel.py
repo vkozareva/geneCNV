@@ -42,10 +42,15 @@ class PloidyModel(object):
         self.likelihoods = np.zeros(n_iterations)
         self.acceptance = np.zeros((n_iterations, self.n_targets))
 
+        # Targets with labels beginning with 'Baseline' only have their intensities sampled.
+        for first_baseline_target_i in xrange(self.n_targets):
+            if self.targets[first_baseline_target_i]['label'].startswith('Baseline'):
+                break
+
         for i in xrange(n_iterations):
             for target_i in xrange(self.n_targets):
-                self.ploidy[target_i], self.intensities[target_i], self.acceptance[i, target_i] = self.joint_target.sample(self.ploidy,
-                                                                                                    self.intensities, target_i)
+                self.ploidy[target_i], self.intensities[target_i], self.acceptance[i, target_i] = self.joint_target.sample(
+                    self.ploidy, self.intensities, target_i, target_i >= first_baseline_target_i)
                 self.mcmc_copy_data[target_i, i] = self.ploidy[target_i]
                 self.mcmc_intens[i, target_i] = self.intensities[target_i]
 

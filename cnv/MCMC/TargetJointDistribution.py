@@ -30,13 +30,17 @@ class TargetJointDistribution(object):
         self.inv_covariance_full = np.concatenate((np.concatenate((np.linalg.inv(self.covariance), np.zeros((1,len(self.covariance)))), axis=0),
                                                    np.zeros((len(self.covariance)+1,1))), axis=1)
 
-    def sample(self, copies, intensities, target_index):
+    def sample(self, copies, intensities, target_index, is_baseline):
         """Given a current set of intensities, and the current ploidy state maintained in this class,
         sample a new ploidy state and intensity for a particular target using the prior distribution as the proposal distribution."""
         intensities_proposed = np.copy(intensities)
-        copies_proposed = np.copy(copies)
-        copy_proposed = np.random.choice(self.support, size=1)
-        copies_proposed[target_index] = copy_proposed
+        if not is_baseline:
+            copies_proposed = np.copy(copies)
+            copy_proposed = np.random.choice(self.support, size=1)
+            copies_proposed[target_index] = copy_proposed
+        else:
+            copies_proposed = copies
+            copy_proposed = copies[target_index]
 
         # don't update intensity for last target (for identifiability)
         if target_index != (len(self.mu)):

@@ -87,6 +87,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     # add option to expand this support later?
     cnv_support = [1, 2, 3]
     # until normalization against other genes, initializing with most probable normal state
+    # These states are fixed for the baseline targets.
     initial_ploidy = 2.0 * np.ones(len(targets))
 
     ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, ploidy=initial_ploidy, exclude_covar=exclude_covar)
