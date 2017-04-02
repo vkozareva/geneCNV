@@ -43,8 +43,10 @@ class PloidyModel(object):
         self.acceptance = np.zeros((n_iterations, self.n_targets))
 
         # Targets with labels beginning with 'Baseline' only have their intensities sampled.
-        for first_baseline_target_i in xrange(self.n_targets):
-            if self.targets[first_baseline_target_i]['label'].startswith('Baseline'):
+        first_baseline_target_i = self.n_targets # In case there are no baseline targets.
+        for i in xrange(self.n_targets):
+            if self.targets[i]['label'].startswith('Baseline'):
+                first_baseline_target_i = i
                 break
 
         for i in xrange(n_iterations):
