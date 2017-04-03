@@ -8,7 +8,7 @@ from mando import main
 from mando import command
 
 import utilities as cnv_util
-from coverage_matrix import  CoverageMatrix
+from coverage_matrix import CoverageMatrix
 from MCMC.PloidyModel import PloidyModel
 from LogisticNormal import hln_EM
 from hln_parameters import HLN_Parameters
@@ -16,14 +16,14 @@ from MCMC.VisualizeMCMC import VisualizeMCMC
 
 
 @command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', remove_pcr_duplicates=False, min_dist=629):
+def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', unwanted_filters=None, min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param targetfile: Path to an output file to contain target intervals as a pickled object.
-    :param wanted_gene: Name of the gene for where to get targets from
-    :param remove_pcr_duplicates: Skip reads that are PCR ducplicates.
+    :param wanted_gene: Gene from which to gather targets
+    :param unwanted_filters: Any filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
@@ -36,7 +36,10 @@ def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD
         with open(targetfile, 'w') as f:
             cPickle.dump(targets, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-    matrix_instance = CoverageMatrix(remove_pcr_duplicates, min_interval_separation=min_dist)
+    if unwanted_filters is not None:
+        unwanted_filters = unwanted_filters.split(',')
+
+    matrix_instance = CoverageMatrix(unwanted_filters, min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
     if outfile:
         coverage_matrix_df.to_csv(outfile)
