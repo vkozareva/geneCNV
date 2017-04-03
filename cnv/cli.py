@@ -23,7 +23,7 @@ def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param targetfile: Path to an output file to contain target intervals as a pickled object.
     :param wanted_gene: Gene from which to gather targets
-    :param unwanted_filters: Any filters on reads that should be skipped, keyed by the name of the filter
+    :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
@@ -39,7 +39,7 @@ def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD
     if unwanted_filters is not None:
         unwanted_filters = unwanted_filters.split(',')
 
-    matrix_instance = CoverageMatrix(unwanted_filters, min_interval_separation=min_dist)
+    matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters, min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
     if outfile:
         coverage_matrix_df.to_csv(outfile)

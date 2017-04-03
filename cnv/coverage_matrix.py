@@ -5,7 +5,7 @@ from genepeeks.common import utilities as util
 
 
 class CoverageMatrix(object):
-    list_of_checks = [
+    default_checks = [
         (lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
         (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60'),
         (lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate'),
@@ -22,8 +22,7 @@ class CoverageMatrix(object):
     def __init__(self, unwanted_filters=None, min_interval_separation=629):
         super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
-        if unwanted_filters:
-            self.filter_list_of_checks(unwanted_filters)
+        self.list_of_checks = self.filter_list_of_checks(unwanted_filters) if unwanted_filters else self.default_checks
         self.min_interval_separation = min_interval_separation
 
     def filter_list_of_checks(self, unwanted_filters):
@@ -32,7 +31,7 @@ class CoverageMatrix(object):
         # Ensure that the provided unwanted_filters are real filters that can be removed
         if not isinstance(unwanted_filters, (list, tuple)):
             util.stop_err('unwanted_filters must be a list or tuple, the following is invalid: {}'.format(unwanted_filters))
-        check_names = [check_name for check, check_name in self.list_of_checks]
+        check_names = [check_name for check, check_name in self.default_checks]
         for unwanted_filter in unwanted_filters:
             if unwanted_filter in check_names:
                 self.logger.info('Removing {} from list_of_checks to perform on each read'.format(unwanted_filter))
@@ -40,7 +39,7 @@ class CoverageMatrix(object):
                 util.stop_err('{} is not a valid check_name to remove from the list_of_checks'.format(unwanted_filter))
 
         # Filter the list of checks to remove the unwanted filters
-        self.list_of_checks = filter(lambda x: x[1] not in unwanted_filters, self.list_of_checks)
+        return filter(lambda x: x[1] not in unwanted_filters, self.default_checks)
 
     def passes_checks(self, read, insert_length, skipped_counts):
         """ Only count reads that pass the necessary quality checks, and keep counts of those that don't """

@@ -12,8 +12,8 @@ class CoverageMatrixTests(unittest.TestCase):
 
     def test_unwanted_filters(self):
         original_number_of_checks = len(self.matrix_instance.list_of_checks)
-        self.matrix_instance.filter_list_of_checks(['PCR_duplicate'])
-        self.assertEqual(original_number_of_checks, len(self.matrix_instance.list_of_checks) + 1)
+        list_of_checks = self.matrix_instance.filter_list_of_checks(['PCR_duplicate'])
+        self.assertEqual(original_number_of_checks, len(list_of_checks) + 1)
 
     def test_targets(self):
         for i, target in enumerate(self.targets):
