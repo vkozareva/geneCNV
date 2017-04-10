@@ -3,41 +3,52 @@ import pandas as pd
 import pysam
 from genepeeks.common import utilities as util
 
-""" Only count reads that pass all of the following checks """
-def list_of_checks(remove_pcr_duplicates):
-    return (
-         [(lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
-          (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60')]
-         +
-         ([(lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate')] if remove_pcr_duplicates else [])
-         +
-         [(lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
-          (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
-          (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
-          (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
-          # To ensure that no read pairs overlap multiple targets, skip all reads with
-          # insert length greater than the distance used to merge intervals
-          (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
-          (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end')
-       ])
-
-
-def passes_checks(read, insert_length, remove_pcr_duplicates, max_insert_length, skipped_counts):
-    """ Only count reads that pass the necessary quality checks, and keep counts of those that don't """
-    for check, check_name in list_of_checks(remove_pcr_duplicates):
-        if check(read, insert_length, max_insert_length):
-            if skipped_counts is not None:
-                util.add_to_dict(skipped_counts, check_name)
-            return False
-    return True
-
 
 class CoverageMatrix(object):
-    def __init__(self, remove_pcr_duplicates, min_interval_separation=629):
+    default_checks = [
+        (lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
+        (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60'),
+        (lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate'),
+        (lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
+        (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
+        (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
+        (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
+        # To ensure that no read pairs overlap multiple targets, skip all reads with
+        # insert length greater than the distance used to merge intervals
+        (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
+        (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end')
+    ]
+
+    def __init__(self, unwanted_filters=None, min_interval_separation=629):
         super(CoverageMatrix, self).__init__()
         self.logger = util.create_logging()
-        self.remove_pcr_duplicates = remove_pcr_duplicates
+        self.list_of_checks = self.filter_list_of_checks(unwanted_filters) if unwanted_filters else self.default_checks
         self.min_interval_separation = min_interval_separation
+
+    def filter_list_of_checks(self, unwanted_filters):
+        """ Remove any unwanted filters from the list of checks to perform on each read """
+
+        # Ensure that the provided unwanted_filters are real filters that can be removed
+        if not isinstance(unwanted_filters, (list, tuple)):
+            util.stop_err('unwanted_filters must be a list or tuple, the following is invalid: {}'.format(unwanted_filters))
+        check_names = [check_name for check, check_name in self.default_checks]
+        for unwanted_filter in unwanted_filters:
+            if unwanted_filter in check_names:
+                self.logger.info('Removing {} from list_of_checks to perform on each read'.format(unwanted_filter))
+            else:
+                util.stop_err('{} is not a valid check_name to remove from the list_of_checks'.format(unwanted_filter))
+
+        # Filter the list of checks to remove the unwanted filters
+        return filter(lambda x: x[1] not in unwanted_filters, self.default_checks)
+
+    def passes_checks(self, read, insert_length, skipped_counts):
+        """ Only count reads that pass the necessary quality checks, and keep counts of those that don't """
+        for check, check_name in self.list_of_checks:
+            if check(read, insert_length, self.min_interval_separation):
+                if skipped_counts is not None:
+                    util.add_to_dict(skipped_counts, check_name)
+                return False
+        return True
 
     def get_unique_panel_intervals(self, print_counts=True):
         """ Get the intervals that are unique to each panel """
@@ -136,7 +147,7 @@ class CoverageMatrix(object):
                     insert_length *= -1
 
                 # Only count reads that pass the necessary quality checks, and keep counts of those that don't
-                if passes_checks(read, insert_length, self.remove_pcr_duplicates, self.min_interval_separation, skipped_counts):
+                if self.passes_checks(read, insert_length, skipped_counts):
                     # Keep track of each read pair, and count coverage at the end in order to only count each read pair once
                     pair_start = min(read.reference_start, read.next_reference_start)
                     # util.add_to_dict(read_pairs, read.query_name, nested_key=(pair_start, insert_length))
