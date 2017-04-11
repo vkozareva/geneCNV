@@ -146,8 +146,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
                 logging.error('Subject {} is missing target {}.'.format(subject['id'], targetCol))
                 errors += 1
             elif subject[targetCol] == 0:
-                logging.error('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
-                errors += 1
+                logging.warning('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
     if errors > 0:
         sys.exit(1)
 
@@ -159,7 +158,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     hln_parameters = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
-        cPickle.dump(hln_parameters, f, protocol = cPickle.HIGHEST_PROTOCOL)
+        cPickle.dump(hln_parameters, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-if __name__ ==  '__main__':
+if __name__ == '__main__':
     main()
