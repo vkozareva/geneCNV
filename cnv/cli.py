@@ -117,14 +117,17 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
 
 @command('train-model')
-def train_model(targetsFile, coverageMatrixFile, outputFile):
+def train_model(targetsFile, coverageMatrixFile, outputFile, fit_diag_only=False):
     """Train a model that detects copy number variation.
 
     :param targets: Pickle file containing target intervals (gene is alternative).
     :param coverageMatrixFile: CSV file containing coverage data for all samples of interest
     :param outputFile: Output file name
+    :param fit_diag_only: if True, will return diagonal matrix after fitting only variances (all off-diag 0)
     """
     logging.info("Running sample training.")
+    if fit_diag_only:
+        logging.info('Fitting only diagonal variance terms.')
 
     # Read the targets file.
     with open(targetsFile) as f:
@@ -155,7 +158,8 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
 
     # Compute the logistic normal hyperparameters.
     # Omit the non-target columns.
-    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=150, tol=1e-11)
+    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=150, tol=1e-11,
+                            fit_diag_only=fit_diag_only)
 
     # Pickle the intervals and hyperparameters into the outputFile.
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
