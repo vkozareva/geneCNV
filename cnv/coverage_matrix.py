@@ -8,16 +8,16 @@ from genepeeks.common import utilities as util
 class CoverageMatrix(object):
     default_checks = [
         (lambda read, insert, max_insert: read.is_unmapped, 'unmapped'),
-        (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ below 60'),
+        (lambda read, insert, max_insert: read.mapping_quality != 60, 'MAPQ_below_60'),
         (lambda read, insert, max_insert: read.is_duplicate, 'PCR_duplicate'),
         (lambda read, insert, max_insert: read.mate_is_unmapped, 'mate_is_unmapped'),
-        (lambda read, insert, max_insert: not read.is_proper_pair, 'not a proper pair'),
+        (lambda read, insert, max_insert: not read.is_proper_pair, 'not_proper_pair'),
         (lambda read, insert, max_insert: read.is_reverse == read.mate_is_reverse, 'tandem_pair'),
-        (lambda read, insert, max_insert: insert <= 0, 'negative insert_length'),
+        (lambda read, insert, max_insert: insert <= 0, 'negative_insert_length'),
         # To ensure that no read pairs overlap multiple targets, skip all reads with
         # insert length greater than the distance used to merge intervals
-        (lambda read, insert, max_insert: insert >= max_insert, 'insert_length greater than interval merge distance'),
-        (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end is less than reference_end')
+        (lambda read, insert, max_insert: insert >= max_insert, 'insert_length_greater_than_merge_distance'),
+        (lambda read, insert, max_insert: min(read.reference_start, read.next_reference_start) + insert < read.reference_end, 'pair_end_less_than_reference_end')
     ]
 
     def __init__(self, unwanted_filters=None, min_interval_separation=629):
