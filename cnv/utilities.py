@@ -26,7 +26,7 @@ def get_merged_exons(min_dist=200, only_primary_transcript=True, only_coding_reg
     return merged_exons, exon_labels
 
 
-def add_interval_labels(combined_intervals_merged, primary_exons):
+def add_interval_labels(combined_intervals_merged, primary_exons, chrom):
     """ Get labels for each interval. If interval overlaps with an exon in the primary transcript,
     use primary transcript exon number. Otherwise use target number """
 
@@ -38,6 +38,7 @@ def add_interval_labels(combined_intervals_merged, primary_exons):
         else:
             label = 'Target{}'.format(i + 1)
         intrv['label'] = label
+        intrv['chrom'] = chrom
 
 
 def combine_panel_intervals(wanted_gene='DMD', min_dist=629):
@@ -67,10 +68,15 @@ def combine_panel_intervals(wanted_gene='DMD', min_dist=629):
             primary_exons = saved_intervals
         intervals_list.append(saved_intervals)
 
+    # Dirty hack for now to add chrom to each interval
+    chroms = set([intrv['chrom'] for intrv_list in intervals_list for intrv in intrv_list])
+    if len(chroms) != 1:
+        util.stop_err('Attempting to merge intervals from different chroms: {}'.format(chroms))
+
     # Get union of the intervals and then merge
     combined_intervals = util.interval_union(*intervals_list)
     combined_intervals_merged = util.merge_intervals(combined_intervals, min_dist=min_dist)
 
-    add_interval_labels(combined_intervals_merged, primary_exons)
+    add_interval_labels(combined_intervals_merged, primary_exons, list(chroms)[0])
 
     return combined_intervals_merged

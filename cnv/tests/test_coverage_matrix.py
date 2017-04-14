@@ -18,6 +18,7 @@ class CoverageMatrixTests(unittest.TestCase):
     def test_targets(self):
         for i, target in enumerate(self.targets):
             self.assertIn('label', target, 'Every interval must have a "label" key')
+            self.assertIn('chrom', target, 'Every interval must have a "chrom" key')
             self.assertGreater(target['end'], target['start'], 'The {} interval has its start after its end'.format(target['label']))
             if i != 0:
                 self.assertGreater(target['start'], self.targets[i - 1]['end'] + self.min_dist,

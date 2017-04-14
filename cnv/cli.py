@@ -16,22 +16,39 @@ from MCMC.VisualizeMCMC import VisualizeMCMC
 
 
 @command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene='DMD', unwanted_filters=None, min_dist=629):
+def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param targetfile: Path to an output file to contain target intervals as a pickled object.
     :param wanted_gene: Gene from which to gather targets
+    :param targets_bed_file: Alternative source of targets, and that may include baseline intervals
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
 
     """
+
     if bamfiles_fofn.endswith('.bam'):
         bamfiles_fofn = bamfiles_fofn.split(',')
-    targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
+    if wanted_gene and targets_bed_file:
+        logging.error("Both --wanted_gene and --targets_bed_file were specified (only one is allowed).")
+        sys.exit(1)
+    elif wanted_gene:
+        targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
+    elif targets_bed_file:
+        targets = []
+        with open(targets_bed_file) as f:
+            for line in f:
+                line = line.rstrip('\r\n')
+                chrom, start, end, name = line.split('\t')
+                targets.append({'chrom': chrom, 'start': int(start), 'end': int(end), 'label': name})
+    else:
+        logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
+        sys.exit(1)
+
     if targetfile:
         with open(targetfile, 'w') as f:
             cPickle.dump(targets, f, protocol=cPickle.HIGHEST_PROTOCOL)
@@ -76,6 +93,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     # add option to expand this support later?
     cnv_support = [1, 2, 3]
     # until normalization against other genes, initializing with most probable normal state
+    # These states are fixed for the baseline targets.
     initial_ploidy = 2.0 * np.ones(len(targets))
 
     ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, ploidy=initial_ploidy, exclude_covar=exclude_covar)
@@ -131,8 +149,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
                 logging.error('Subject {} is missing target {}.'.format(subject['id'], targetCol))
                 errors += 1
             elif subject[targetCol] == 0:
-                logging.error('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
-                errors += 1
+                logging.warning('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
     if errors > 0:
         sys.exit(1)
 
@@ -144,7 +161,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     hln_parameters = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
-        cPickle.dump(hln_parameters, f, protocol = cPickle.HIGHEST_PROTOCOL)
+        cPickle.dump(hln_parameters, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-if __name__ ==  '__main__':
+if __name__ == '__main__':
     main()
