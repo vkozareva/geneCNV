@@ -86,15 +86,16 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     subject_df = CoverageMatrix(False).create_coverage_matrix([subjectBamfilePath], targets)
     subject_id = subject_df['subject'][0]
     # get 'normal' copy number based on whether subject is male or female
-    norm_copy_num = 1 if subject_id[0] == 'M' else 2
+    norm_copy_num = 1. if subject_id[0] == 'M' else 2.
     target_columns = [target['label'] for target in targets]
     subject_data = subject_df[target_columns].values.astype('float')
 
     # add option to expand this support later?
-    cnv_support = [1, 2, 3]
+    # note that having 0 in support causes problems in the joint probability calculation
+    cnv_support = [1e-10, 1, 2] if subject_id[0] == 'M' else [1, 2, 3]
     # until normalization against other genes, initializing with most probable normal state
     # These states are fixed for the baseline targets.
-    initial_ploidy = 2.0 * np.ones(len(targets))
+    initial_ploidy = norm_copy_num * np.ones(len(targets))
 
     ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, ploidy=initial_ploidy, exclude_covar=exclude_covar)
     ploidy_model.RunMCMC(n_iterations)
