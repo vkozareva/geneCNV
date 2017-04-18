@@ -16,18 +16,21 @@ from MCMC.VisualizeMCMC import VisualizeMCMC
 
 
 @command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
+def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
     :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
-    :param targetfile: Path to an output file to contain target intervals as a pickled object.
+    :param target_argfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
     :param targets_bed_file: Alternative source of targets, and that may include baseline intervals
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
+
+    Valid filter names: unmapped, MAPQ_below_60, PCR_duplicate, mate_is_unmapped, not_proper_pair, tandem_pair,
+                        negative_insert_length, insert_length_greater_than_merge_distance, pair_end_less_than_reference_end
 
     """
 
@@ -49,12 +52,15 @@ def create_matrix(bamfiles_fofn, outfile=None, targetfile=None, wanted_gene=None
         logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
         sys.exit(1)
 
-    if targetfile:
-        with open(targetfile, 'w') as f:
-            cPickle.dump(targets, f, protocol=cPickle.HIGHEST_PROTOCOL)
-
     if unwanted_filters is not None:
         unwanted_filters = unwanted_filters.split(',')
+
+    if target_argfile:
+        targets_params = {'targets': targets,
+                          'unwanted_filters': unwanted_filters,
+                          'min_dist': min_dist}
+        with open(target_argfile, 'w') as f:
+            cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
     matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters, min_interval_separation=min_dist)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
@@ -68,7 +74,8 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
-    :param parametersFile: Pickled file containing an instance of HLN_Parameters (mu, covariance, targets)
+    :param parametersFile: Pickled file containing a dict with CoverageMatrix arguments and
+                           instance of HLN_Parameters (mu, covariance, targets)
     :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
                        and one .pdf displaying stacked bar chart)
     :param n_iterations: The number of MCMC iterations desired
@@ -79,24 +86,27 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     logging.info("Running evaluate samples")
 
     # Read the parameters file.
-    hln_parameters = cPickle.load(open(parametersFile, 'rb'))
-    targets = hln_parameters.targets
+    targets_params = cPickle.load(open(parametersFile, 'rb'))
+    targets = targets_params['parameters'].targets
 
     # Parse subject bamfile
-    subject_df = CoverageMatrix(False).create_coverage_matrix([subjectBamfilePath], targets)
+    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters'],
+                                min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], targets)
     subject_id = subject_df['subject'][0]
     # get 'normal' copy number based on whether subject is male or female
-    norm_copy_num = 1 if subject_id[0] == 'M' else 2
+    norm_copy_num = 1. if subject_id[0] == 'M' else 2.
     target_columns = [target['label'] for target in targets]
     subject_data = subject_df[target_columns].values.astype('float')
 
     # add option to expand this support later?
-    cnv_support = [1, 2, 3]
+    # note that having 0 in support causes problems in the joint probability calculation
+    cnv_support = [1e-10, 1, 2] if subject_id[0] == 'M' else [1, 2, 3]
     # until normalization against other genes, initializing with most probable normal state
     # These states are fixed for the baseline targets.
-    initial_ploidy = 2.0 * np.ones(len(targets))
+    initial_ploidy = norm_copy_num * np.ones(len(targets))
 
-    ploidy_model = PloidyModel(cnv_support, hln_parameters, data=subject_data, ploidy=initial_ploidy, exclude_covar=exclude_covar)
+    ploidy_model = PloidyModel(cnv_support, targets_params['parameters'], data=subject_data,
+                               ploidy=initial_ploidy, exclude_covar=exclude_covar)
     ploidy_model.RunMCMC(n_iterations)
     copy_posteriors = ploidy_model.ReportMCMCData()
 
@@ -117,18 +127,22 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
 
 @command('train-model')
-def train_model(targetsFile, coverageMatrixFile, outputFile):
+def train_model(targetsFile, coverageMatrixFile, outputFile, fit_diag_only=False):
     """Train a model that detects copy number variation.
 
-    :param targets: Pickle file containing target intervals (gene is alternative).
+    :param targetsFile: Pickled file containing target intervals and CoverageMatrix arguments
     :param coverageMatrixFile: CSV file containing coverage data for all samples of interest
-    :param outputFile: Output file name
+    :param outputFile: Output file name, returns CoverageMatrix arguments, and HLN_Parameters object in pickled dict
+    :param fit_diag_only: if True, will return diagonal matrix after fitting only variances (all off-diag 0)
     """
     logging.info("Running sample training.")
+    if fit_diag_only:
+        logging.info('Fitting only diagonal variance terms.')
 
     # Read the targets file.
     with open(targetsFile) as f:
-        targets = cPickle.load(f)
+        targets_params = cPickle.load(f)
+        targets = targets_params['targets']
 
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
@@ -155,13 +169,15 @@ def train_model(targetsFile, coverageMatrixFile, outputFile):
 
     # Compute the logistic normal hyperparameters.
     # Omit the non-target columns.
-    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=150, tol=1e-11)
+    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=150, tol=1e-11,
+                            fit_diag_only=fit_diag_only)
 
-    # Pickle the intervals and hyperparameters into the outputFile.
+    # Pickle the intervals, hyperparameters and CoverageMatrix arguments into the outputFile.
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
-    hln_parameters = HLN_Parameters(targets, mu, covariance)
+    targets_params['parameters'] = HLN_Parameters(targets, mu, covariance)
+    del targets_params['targets']
     with open(outputFile, 'w') as f:
-        cPickle.dump(hln_parameters, f, protocol=cPickle.HIGHEST_PROTOCOL)
+        cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
 if __name__ == '__main__':
     main()

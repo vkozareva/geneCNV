@@ -101,7 +101,7 @@ def _conditional_mode(y, mu, cov, EMiter, initialz):
 
     return mu_hat, cov_hat, loglike
 
-def hln_EM(Y, max_iterations=25, tol=1e-6):
+def hln_EM(Y, max_iterations=25, tol=1e-6, fit_diag_only=False):
     """Returns estimates for mu and cov after EM on subject data.
     Y -- N x k matrix where k is the number of exons and N is the number of subjects
     """
@@ -109,7 +109,6 @@ def hln_EM(Y, max_iterations=25, tol=1e-6):
     k = Y.shape[1]
     mu = np.zeros((k-1, 1))
     cov = np.eye(k-1)
-    mu_hat = np.zeros((k-1, m))
     cov_hat = np.zeros((k-1, k-1, m))
     per_sub_loglikes = np.zeros((m, 1))
 
@@ -130,6 +129,8 @@ def hln_EM(Y, max_iterations=25, tol=1e-6):
         mu = (1. / m) * np.sum(mu_hat, axis=1).reshape((-1, 1))
         c_mu_hat = mu_hat - np.tile(mu, [1, m])
         cov = (1. / m) * (np.dot(c_mu_hat, c_mu_hat.T) + np.sum(cov_hat, axis=2))
+        if fit_diag_only:
+            cov = np.diag(np.diagonal(cov))
 
         change = np.amax([np.amax(np.absolute(mu - oldmu)), np.amax(np.absolute(cov - oldcov))])
         iters += 1

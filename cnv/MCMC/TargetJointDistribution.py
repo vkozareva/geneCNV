@@ -12,16 +12,10 @@ class TargetJointDistribution(object):
         self.support = support
         self.exclude_covar = exclude_covar
 
-        # compute all inverted components for conditional covariance one time upfront
+        # compute all repeated matrix components for conditional covariance one time upfront
         if not self.exclude_covar:
-            self.cond_inverses = np.zeros((len(mu), len(mu)-1, len(mu)-1))
-            for index in xrange(len(mu)):
-                cov_22_t = np.concatenate((covariance[:index, :index], covariance[:index, (index+1):]), axis=1)
-                cov_22_b = np.concatenate((covariance[(index+1):, :index], covariance[(index+1):, (index+1):]), axis=1)
-                cov_22 = np.concatenate((cov_22_t, cov_22_b), axis=0)
-                cov_22_inv = np.linalg.inv(cov_22)
-                self.cond_inverses[index] = cov_22_inv
-            logging.info('Finished computing inverse conditional matrices')
+            self.conditional_mats = [self.get_conditional_mvn(mu, covariance, index, return_matrix_comp=True) for index in xrange(len(mu))]
+            logging.info('Finished computing conditional matrix components')
 
         self.mu = mu
         # keep only diagonal if excluding covariances
@@ -49,7 +43,7 @@ class TargetJointDistribution(object):
                 cov_bar = self.covariance[target_index, target_index]
             else:
                 mu_bar, cov_bar = self.get_conditional_mvn(self.mu, self.covariance, target_index,
-                                                           intensities[:-1], self.cond_inverses[target_index])
+                                                           intensities[:-1], self.conditional_mats[target_index])
 
             # sample intensity from conditional normal
             intensity_proposed = np.random.normal(mu_bar, np.sqrt(cov_bar))
@@ -87,33 +81,48 @@ class TargetJointDistribution(object):
         return log_joint
 
     @staticmethod
-    def get_conditional_mvn(mu, cov, index, intensities, cov_22_inv=None):
-        """Returns mu and cov for conditional normal distribution for single unknown value
-           Pass in previously inverted 2,2 component for faster performance.
-           Quadrants are as follows (after translation of desired index to 1,1 position):
-           [1,1 [.. ... 1,2 ... ..]]
-           [[.. [.. ... ... ... ...]
-           [... ... ... ... ... ...]
-           [2,1 ... ... 2,2 ... ...]
-           [... ... ... ... ... ...]
-           [..] ... ... ... ... ..]]
+    def get_conditional_mvn(mu, cov, index, intensities=None, matrix_comp=None, return_matrix_comp=False):
+        """ Returns mu and covariance for conditional normal distribution for single unknown value,
+        or covariance matrix components needed to compute conditional mu and covariance.
 
-           """
-        mu_1 = mu[index]
-        mu_2 = np.delete(mu, index)
-        a = np.delete(intensities, index)
-        # split covariance matrix into quadrants and compute each one separately
-        cov_11 = cov[index, index]
-        cov_12 = np.concatenate((cov[index][:index], cov[index][(index+1):])).reshape((1, -1))
-        cov_21 = np.concatenate((cov[:,index][:index], cov[:, index][(index+1):])).reshape((-1,1))
+        mu -- array of len k
+        cov -- k x k matrix of covariance values corresponding to mu array
+        index -- index of unknown value in intensities
+        intensities -- array of len k with known intensity values (including value for unknown index),
+                       not required if only returning matrix_comp
+        matrix_comp -- dictionary containing pre-computed matrix components,
+                       cov_12, cov_22_inv, cov_bar for faster performance
+        return_matrix_comp -- will return matrix_comp dictionary, not mu and covariance
 
-        if cov_22_inv is None:
+        Quadrants are as follows (after translation of desired index to 1,1 position):
+        [1,1 [.. ... 1,2 ... ..]]
+        [[.. [.. ... ... ... ...]
+        [... ... ... ... ... ...]
+        [2,1 ... ... 2,2 ... ...]
+        [... ... ... ... ... ...]
+        [..] ... ... ... ... ..]]
+
+        """
+
+        if matrix_comp is None:
+            # split covariance matrix into quadrants and compute each one separately, storing in dict as necessary
+            cov_11 = cov[index, index]
+            matrix_comp = {'cov_12': np.concatenate((cov[index][:index], cov[index][(index+1):])).reshape((1, -1))}
+            cov_21 = np.concatenate((cov[:,index][:index], cov[:, index][(index+1):])).reshape((-1,1))
+
             cov_22_t = np.concatenate((cov[:index, :index], cov[:index, (index+1):]), axis=1)
             cov_22_b = np.concatenate((cov[(index+1):, :index], cov[(index+1):, (index+1):]), axis=1)
             cov_22 = np.concatenate((cov_22_t, cov_22_b), axis=0)
-            cov_22_inv = np.linalg.inv(cov_22)
 
-        mu_bar = mu_1 + np.dot(np.dot(cov_12, cov_22_inv), (a - mu_2).reshape((-1,1)))
-        cov_bar = cov_11 - np.dot(np.dot(cov_12, cov_22_inv), cov_21)
+            matrix_comp['cov_22_inv'] = np.linalg.inv(cov_22)
+            matrix_comp['cov_bar'] = cov_11 - np.dot(np.dot(matrix_comp['cov_12'], matrix_comp['cov_22_inv']), cov_21)
 
-        return mu_bar.flatten()[0], cov_bar.flatten()[0]
+        if return_matrix_comp:
+            return matrix_comp
+        else:
+            mu_1 = mu[index]
+            mu_2 = np.delete(mu, index)
+            a = np.delete(intensities, index)
+
+            mu_bar = mu_1 + np.dot(np.dot(matrix_comp['cov_12'], matrix_comp['cov_22_inv']), (a - mu_2).reshape((-1,1)))
+            return mu_bar.flatten()[0], matrix_comp['cov_bar'].flatten()[0]

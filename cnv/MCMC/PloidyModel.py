@@ -75,8 +75,8 @@ class PloidyModel(object):
         for target_i in xrange(self.n_targets):
             # Exclude samples before burn in and then take only every 100th sample to reduce autocorrelation.
             copy_slice = self.mcmc_copy_data[target_i][burn_in:][::autocor_slice]
-            copy_posteriors[target_i] = np.bincount(copy_slice.astype(np.int64),
-                                                       minlength=len(self.cnv_support) + 1)[1:]
+            for cni, copy_num in enumerate(self.cnv_support):
+                copy_posteriors[target_i][cni] = np.sum(copy_slice == copy_num)
         copy_posteriors /= float(len(copy_slice))
 
         # find some way to return the intensity distributions?
