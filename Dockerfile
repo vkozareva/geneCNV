@@ -18,3 +18,25 @@ RUN ./runtests.sh
 
 WORKDIR ..
 RUN rm -rf dmd
+
+# Copy model training data including coverage matrix and hyperparameters.
+# For now just assume they were previously built in the training directory.
+COPY training/training_bam.fofn \
+     training/training_coverage_matrix_wanted.csv \
+     training/training_targets_wanted.pickle \
+     training/training_wanted_parameters.pickle \
+     training/DMD_targets.bed \
+     training/DMD_coverage_matrix.csv \
+     training/DMD_targets.pickle \
+     training/DMD_parameters.pickle \
+     training/DMD_with_baseline_targets.bed \
+     training/DMD_with_baseline_coverage_matrix.csv \
+     training/DMD_with_baseline_targets.pickle \
+     training/DMD_with_baseline_parameters.pickle \
+     training/
+USER root
+RUN chown -R genepeeks.genepeeks training
+USER genepeeks
+WORKDIR training
+
+ENTRYPOINT ["/home/genepeeks/.pyenv/shims/cnv", "evaluate-sample"]
