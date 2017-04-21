@@ -1,5 +1,6 @@
 import os
 import re
+import numpy as np
 import pandas as pd
 import pysam
 from genepeeks.common import utilities as util
@@ -227,6 +228,11 @@ class CoverageMatrix(object):
 
         # Add a column with the ratio of inherited disease only reads compared to Trusight One only reads
         coverage_df['TSID_ratio'] = coverage_df['TSID_only'] / (coverage_df['TSID_only'] + coverage_df['TSO_only'])
+
+        # Add a column for sum of all baseline counts, if any baseline targets exist
+        baseline_columns = [column for column in coverage_df.columns if column.startswith('Baseline')]
+        if baseline_columns:
+            coverage_df['BaselineSum'] = np.sum(coverage_df[baseline_columns], axis=1)
 
         # Log counts of skipped reads
         for key, count in skipped_counts.items():

@@ -56,7 +56,7 @@ class TestPloidyModel(unittest.TestCase):
         The copy number with the highest probability for each exon should be the initial random copy number."""
 
         n_draws = 40000
-        cnv_support = [1, 2, 3]
+        cnv_support = [1e-10, 1, 2, 3]
 
         # loading the params as a dict here because for pickled user class instances
         # cPickle requires the class to be on the same directory level as when instance was pickled
@@ -64,7 +64,7 @@ class TestPloidyModel(unittest.TestCase):
         n_targets = len(test_hln_params['targets'])
         test_params = HLN_Parameters(test_hln_params['targets'], test_hln_params['mu'], test_hln_params['covariance'])
 
-        copy_numbers = CopyNumberDistribution(n_targets, support=cnv_support).sample_prior()
+        copy_numbers = CopyNumberDistribution(n_targets, support=cnv_support).sample_prior(n_targets)
         logging.info('Initial target copy numbers: {}'.format(copy_numbers))
         intensities = IntensitiesDistribution(test_params.mu, test_params.covariance).sample()
         p_vector = np.multiply(copy_numbers, np.exp(intensities))

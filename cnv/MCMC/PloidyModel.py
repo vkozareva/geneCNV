@@ -15,7 +15,8 @@ class PloidyModel(object):
     hln_parameters -- instance of HLN_Parameters containing mu (array), covariance (matrix), and targets(list)
     """
 
-    def __init__(self, cnv_support, hln_parameters, data=None, ploidy=None, intensities=None, exclude_covar=False):
+    def __init__(self, cnv_support, hln_parameters, data=None, ploidy=None, intensities=None, first_baseline_i=None,
+                 exclude_covar=False):
         """Initialize the data model with its input arguments.
         Load the parameters and initialize starting states as necessary."""
 
@@ -23,13 +24,15 @@ class PloidyModel(object):
         self.covariance = hln_parameters.covariance
         self.targets = hln_parameters.targets
         self.n_targets = len(self.targets)
+        self.first_baseline_i = self.n_targets if first_baseline_i is None else first_baseline_i
         self.data = data
 
         self.cnv_support = cnv_support
 
         # initialize values
         self.intensities = IntensitiesDistribution(self.mu, self.covariance).sample() if intensities is None else intensities
-        self.ploidy = CopyNumberDistribution(self.n_targets, support=self.cnv_support).sample_prior() if ploidy is None else ploidy
+        self.ploidy = CopyNumberDistribution(self.n_targets,
+                                             support=self.cnv_support).sample_prior(self.first_baseline_i) if ploidy is None else ploidy
 
         # initialize joint distribution with data and parameters
         self.joint_target = TargetJointDistribution(self.mu, self.covariance, self.cnv_support, self.data,
@@ -43,16 +46,10 @@ class PloidyModel(object):
         self.acceptance = np.zeros((n_iterations, self.n_targets))
 
         # Targets with labels beginning with 'Baseline' only have their intensities sampled.
-        first_baseline_target_i = self.n_targets # In case there are no baseline targets.
-        for i in xrange(self.n_targets):
-            if self.targets[i]['label'].startswith('Baseline'):
-                first_baseline_target_i = i
-                break
-
         for i in xrange(n_iterations):
             for target_i in xrange(self.n_targets):
                 self.ploidy[target_i], self.intensities[target_i], self.acceptance[i, target_i] = self.joint_target.sample(
-                    self.ploidy, self.intensities, target_i, target_i >= first_baseline_target_i)
+                    self.ploidy, self.intensities, target_i, target_i >= self.first_baseline_i)
                 self.mcmc_copy_data[target_i, i] = self.ploidy[target_i]
                 self.mcmc_intens[i, target_i] = self.intensities[target_i]
 
