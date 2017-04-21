@@ -70,7 +70,7 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, exclude_covar=False, norm_cutoff=0.3):
+def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.1, exclude_covar=False, norm_cutoff=0.3):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -79,6 +79,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
                        and one .pdf displaying stacked bar chart)
     :param n_iterations: The number of MCMC iterations desired
+    :param burn_in: The number of MCMC iterations to exclude as part of burn-in period
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
@@ -113,18 +114,46 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                                                                                            len(full_targets) - first_baseline_i))
             break
 
-    ploidy_model = PloidyModel(cnv_support, targets_params['parameters'], data=subject_data,
-                               first_baseline_i=first_baseline_i, exclude_covar=exclude_covar)
-    ploidy_model.RunMCMC(n_iterations)
-    copy_posteriors = ploidy_model.ReportMCMCData()
+    # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
+    # note that this will only catch metastabality errors that lead to false positives, not false negatives
+    thresh_loglike_diff = -30
+    loglike_diff = -100
+    tries = 0
+    while loglike_diff < thresh_loglike_diff:
+        logging.info('Run {}; latest loglike_diff = {}'.format(tries, loglike_diff))
+        if tries > 5:
+            logging.error('Metastability error: unable to reach convergence at most likely mode')
+        ploidy_model = PloidyModel(cnv_support, targets_params['parameters'], data=subject_data,
+                                   first_baseline_i=first_baseline_i, exclude_covar=exclude_covar)
 
+        # increase number of iterations with tries
+        total_iters = int(n_iterations * (1. + 0.5 * tries))
+        ploidy_model.RunMCMC(total_iters)
+
+        # choose more appropriate burn-in if there seems to be possibility of metastability error
+        copy_posteriors = ploidy_model.ReportMCMCData(int(burn_in_prop * total_iters))
+        loglike_diff = ploidy_model.LikelihoodComparison(norm_copy_num)
+        if loglike_diff < thresh_loglike_diff:
+            grad_threshold = 0.35
+            peak_pos, peak_height = ploidy_model.DetectModeJump()
+            burn_in = peak_pos if peak_height > grad_threshold else int(burn_in_prop * total_iters)
+            logging.info('Setting burn-in to {} on run {}'.format(burn_in, tries))
+
+            copy_posteriors = ploidy_model.ReportMCMCData(burn_in)
+            loglike_diff = ploidy_model.LikelihoodComparison(norm_copy_num)
+        tries += 1
+    logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
+
+    # Create dataframe for reporting
     mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
     mcmc_df['Target'] = target_columns
     mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
 
+    # Create stacked bar plot and write to pdf
     visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors[:first_baseline_i])
     visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
 
+    # Log targets which seem to have abnormal copy numbers
     for target_i in xrange(len(copy_posteriors[:first_baseline_i])):
         norm_i = np.where(cnv_support == norm_copy_num)[0][0]
         if copy_posteriors[target_i][norm_i] < norm_cutoff:
