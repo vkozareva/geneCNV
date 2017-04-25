@@ -9,11 +9,10 @@ from mando import command
 
 import utilities as cnv_util
 from coverage_matrix import CoverageMatrix
-from MCMC.PloidyModel import PloidyModel
 from LogisticNormal import hln_EM
 from hln_parameters import HLN_Parameters
 from MCMC.VisualizeMCMC import VisualizeMCMC
-
+from MCMC.ConvergenceAnalysis import ConvergenceAnalysis
 
 @command('create-matrix')
 def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
@@ -70,7 +69,8 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.1, exclude_covar=False, norm_cutoff=0.3):
+def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
+                    exclude_covar=False, no_gelman_rubin=False, num_chains=3, norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -78,9 +78,13 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                            instance of HLN_Parameters (mu, covariance, targets)
     :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
                        and one .pdf displaying stacked bar chart)
-    :param n_iterations: The number of MCMC iterations desired
-    :param burn_in: The number of MCMC iterations to exclude as part of burn-in period
+    :param n_iterations: The number of MCMC iterations desired (should be divisible by 100)
+    :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period (should be divisible by 0.05)
+    :param autocor_slice: The autocorrelation slice coefficient to use when reporting posterior probabilities
+                          ie. only every 50th iteration will be kept
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
+    :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
+    :param num_chains: Number of independent chains to use during G-R analysis
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
     """
@@ -114,34 +118,16 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                                                                                            len(full_targets) - first_baseline_i))
             break
 
+    # ploidy model (and sampling) actually run within convergence analysis instance
+    convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
+                                               exclude_covar, n_iterations, burn_in_prop)
+    if not no_gelman_rubin:
+        convergence_analysis.gelman_rubin_analysis(num_chains, len(targets_to_test))
+
     # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
     # note that this will only catch metastabality errors that lead to false positives, not false negatives
-    thresh_loglike_diff = -30
-    loglike_diff = -100
-    tries = 0
-    while loglike_diff < thresh_loglike_diff:
-        logging.info('Run {}; latest loglike_diff = {}'.format(tries, loglike_diff))
-        if tries > 5:
-            logging.error('Metastability error: unable to reach convergence at most likely mode')
-        ploidy_model = PloidyModel(cnv_support, targets_params['parameters'], data=subject_data,
-                                   first_baseline_i=first_baseline_i, exclude_covar=exclude_covar)
+    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(norm_copy_num, autocor_slice)
 
-        # increase number of iterations with tries
-        total_iters = int(n_iterations * (1. + 0.5 * tries))
-        ploidy_model.RunMCMC(total_iters)
-
-        # choose more appropriate burn-in if there seems to be possibility of metastability error
-        copy_posteriors = ploidy_model.ReportMCMCData(int(burn_in_prop * total_iters))
-        loglike_diff = ploidy_model.LikelihoodComparison(norm_copy_num)
-        if loglike_diff < thresh_loglike_diff:
-            grad_threshold = 0.35
-            peak_pos, peak_height = ploidy_model.DetectModeJump()
-            burn_in = peak_pos if peak_height > grad_threshold else int(burn_in_prop * total_iters)
-            logging.info('Setting burn-in to {} on run {}'.format(burn_in, tries))
-
-            copy_posteriors = ploidy_model.ReportMCMCData(burn_in)
-            loglike_diff = ploidy_model.LikelihoodComparison(norm_copy_num)
-        tries += 1
     logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
 
     # Create dataframe for reporting

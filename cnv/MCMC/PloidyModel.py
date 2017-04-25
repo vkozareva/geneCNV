@@ -40,7 +40,7 @@ class PloidyModel(object):
         self.joint_target = TargetJointDistribution(self.mu, self.covariance, self.cnv_support, self.data,
                                                     exclude_covar=exclude_covar)
 
-    def RunMCMC(self, n_iterations=10000):
+    def RunMCMC(self, n_iterations=10000, prior_copy_data=None, prior_mcmc_intens=None, prior_likelihoods=None):
         """Metropolis Hastings sampling of the posterior likelihood"""
         self.mcmc_copy_data = np.zeros((self.n_targets, n_iterations))
         self.mcmc_intens = np.zeros((n_iterations, self.n_targets))
@@ -64,6 +64,15 @@ class PloidyModel(object):
 
         # Log acceptance ratio at end
         logging.info('Acceptance ratio: {}'.format(np.mean(self.acceptance)))
+
+        # Combine with any previously computed sampling data
+        # all or none should be passed in
+        if prior_copy_data is not None:
+            self.mcmc_copy_data = np.concatenate((prior_copy_data, np.copy(self.mcmc_copy_data)), axis=1)
+            self.mcmc_intens = np.concatenate((prior_mcmc_intens, np.copy(self.mcmc_intens)), axis=0)
+            self.likelihoods = np.concatenate((prior_likelihoods, np.copy(self.likelihoods)))
+
+            logging.info('Using previously passed iteration data, updating to {} total iterations'.format(len(self.likelihoods)))
 
     def ReportMCMCData(self, burn_in=1000, autocor_slice=100):
         """Report on the posterior distribution obtained by the sampling procedure,
