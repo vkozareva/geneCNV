@@ -32,13 +32,18 @@ class PloidyModel(object):
         self.cnv_support = cnv_support
 
         # initialize values
-        self.intensities = IntensitiesDistribution(self.mu, self.covariance).sample() if intensities is None else intensities
-        self.ploidy = CopyNumberDistribution(self.n_targets,
-                                             support=self.cnv_support).sample_prior(self.first_baseline_i) if ploidy is None else ploidy
+        self.initStates(ploidy, intensities)
+        self.likelihoods = None
 
         # initialize joint distribution with data and parameters
         self.joint_target = TargetJointDistribution(self.mu, self.covariance, self.cnv_support, self.data,
                                                     exclude_covar=exclude_covar)
+
+    def initStates(self, ploidy=None, intensities=None):
+        """Reset the ploidy and intensity states"""
+        self.intensities = IntensitiesDistribution(self.mu, self.covariance).sample() if intensities is None else intensities
+        self.ploidy = CopyNumberDistribution(self.n_targets,
+                                             support=self.cnv_support).sample_prior(self.first_baseline_i) if ploidy is None else ploidy
 
     def RunMCMC(self, n_iterations=10000, prior_copy_data=None, prior_mcmc_intens=None, prior_likelihoods=None):
         """Metropolis Hastings sampling of the posterior likelihood"""

@@ -13,7 +13,8 @@ class ConvergenceAnalysis(object):
         self.exclude_covar = exclude_covar
         self.n_iterations = n_iterations
         self.burn_in_prop = burn_in_prop
-        self.ploidy_model = None
+        self.ploidy_model = PloidyModel(self.cnv_support, self.hln_parameters, data=self.data,
+                                        first_baseline_i=self.first_baseline_i, exclude_covar=self.exclude_covar)
 
     def gelman_rubin_analysis(self, num_chains, n_test_targets, iter_step_size=5000, max_iterations=25000, max_prop=0.5):
         """Run convergence analysis on MCMC sampler, given subject data and starting parameters. Uses Gelman-Rubin potential scale
@@ -45,9 +46,6 @@ class ConvergenceAnalysis(object):
             if self.burn_in_prop > max_prop or tries == 0:
                 if tries > 0:
                     self.n_iterations += iter_step_size
-                    # store previous values to allow for continuation of chains
-                    sampling_args = [[iter_step_size, np.copy(posterior_ploidies[c_i]).T, np.copy(posterior_intensities[c_i]),  # pylint:disable=used-before-assignment
-                                      np.copy(posterior_loglikes[c_i])] for c_i in range(num_chains)]    # pylint:disable=used-before-assignment
 
                 posterior_loglikes = np.zeros((num_chains, self.n_iterations))
                 posterior_ploidies = np.zeros((num_chains, self.n_iterations, n_test_targets))
@@ -65,15 +63,16 @@ class ConvergenceAnalysis(object):
                 logging.info(('Performing Gelman-Rubin analysis with {} iterations and burn-in '
                               'prop of {}.'.format(self.n_iterations, self.burn_in_prop, psrf_loglikes, np.mean(psrf_intensities))))
                 for c_i in range(num_chains):
-                    self.ploidy_model = PloidyModel(self.cnv_support, self.hln_parameters, data=self.data, ploidy=stored_data[c_i][0],
-                                                    intensities=stored_data[c_i][1], first_baseline_i=self.first_baseline_i, exclude_covar=self.exclude_covar)
+                    self.ploidy_model.initStates(*stored_data[c_i])
                     self.ploidy_model.RunMCMC(*sampling_args[c_i])
                     posterior_loglikes[c_i] = self.ploidy_model.likelihoods
                     posterior_ploidies[c_i] = self.ploidy_model.mcmc_copy_data.T
                     posterior_intensities[c_i] = self.ploidy_model.mcmc_intens
 
-                    stored_data[c_i][0] = np.copy(self.ploidy_model.ploidy)
-                    stored_data[c_i][1] = np.copy(self.ploidy_model.intensities)
+                    # store previous values to allow for continuation of chains
+                    stored_data[c_i] = [np.copy(self.ploidy_model.ploidy), np.copy(self.ploidy_model.intensities)]
+                    sampling_args[c_i] = [iter_step_size, np.copy(self.ploidy_model.mcmc_copy_data),
+                                          np.copy(self.ploidy_model.mcmc_intens), np.copy(self.ploidy_model.likelihoods)]
 
 
             # split each chain into two halves (after removing burn-in)
@@ -134,9 +133,8 @@ class ConvergenceAnalysis(object):
         autocor_slice -- Autocor_slice to use in computing copy_posteriors
         max_tries -- Maximum number of attempts in finding convergence conditions
         """
-        if self.ploidy_model is None:
-            self.ploidy_model = PloidyModel(self.cnv_support, self.hln_parameters, data=self.data,
-                                            first_baseline_i=self.first_baseline_i, exclude_covar=self.exclude_covar)
+        # check if iterations have already been run
+        if self.ploidy_model.likelihoods is None:
             self.ploidy_model.RunMCMC(self.n_iterations)
 
         copy_posteriors = self.ploidy_model.ReportMCMCData(int(round(self.burn_in_prop * self.n_iterations)), autocor_slice)
@@ -150,8 +148,7 @@ class ConvergenceAnalysis(object):
                 logging.error('Metastability error: unable to reach convergence at most likely mode')
             # check if metastability error in this chain after increasing n_iterations
             if tries > 0:
-                self.ploidy_model = PloidyModel(self.cnv_support, self.hln_parameters, data=self.data,
-                                                first_baseline_i=self.first_baseline_i, exclude_covar=self.exclude_covar)
+                self.ploidy_model.initStates()
                 self.ploidy_model.RunMCMC(self.n_iterations)
                 copy_posteriors = self.ploidy_model.ReportMCMCData(self.burn_in, autocor_slice)
                 loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
