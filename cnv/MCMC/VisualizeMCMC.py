@@ -8,7 +8,7 @@ class VisualizeMCMC(object):
     def __init__(self, cnv_support, targets, copy_posteriors, intensity_posteriors=None):
         self.cnv_support = cnv_support
         # first three are historically used colors -- can be changed to match rest of color map easily
-        self.colors =  ['#019600', '#3C5F5A', '#219AD8'] + [(0, i / 20.0, 0, 1) for i in range(len(cnv_support)-3)]
+        self.colors =  ['tomato', '#019600', '#3C5F5A', '#219AD8'] + [(0, i / 20.0, 0, 1) for i in range(len(cnv_support)-4)]
         self.targets = targets
         self.copy_posteriors = copy_posteriors
         self.intensity_posteriors = intensity_posteriors  # may want to visualize intensity posteriors in some way later
