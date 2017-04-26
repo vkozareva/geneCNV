@@ -132,9 +132,12 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
 
-    # Create dataframe for reporting
+    # Create dataframe for reporting copy number posteriors
     mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
     mcmc_df['Target'] = target_columns
+    mcmc_df['Chrom'] = [target['chrom'] for target in targets_to_test]
+    mcmc_df['Loc_start'] = [target['start'] for target in targets_to_test]
+    mcmc_df['Loc_end'] = [target['end'] for target in targets_to_test]
     mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
 
     # Create stacked bar plot and write to pdf
@@ -142,14 +145,49 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
 
     # Log targets which seem to have abnormal copy numbers
+    norm_index = np.where(cnv_support == norm_copy_num)[0][0]
+
     for target_i in xrange(len(copy_posteriors[:first_baseline_i])):
-        norm_i = np.where(cnv_support == norm_copy_num)[0][0]
-        if copy_posteriors[target_i][norm_i] < norm_cutoff:
+        if copy_posteriors[target_i][norm_index] < norm_cutoff:
             high_copy = np.argmax(copy_posteriors[target_i])
             high_posterior = copy_posteriors[target_i][high_copy]
-            logging.info('{} has a posterior probability of {} of having {} copies'.format(target_columns[target_i],
-                                                                                           high_posterior, cnv_support[high_copy]))
+            logging.info(('{} has a posterior probability of {} of having '
+                          '{} copies'.format(target_columns[target_i], high_posterior, cnv_support[high_copy])))
 
+    # create summary file of all mutations
+    MAP_ploidy = np.take(cnv_support, np.argmax(copy_posteriors[:first_baseline_i], axis=1))
+    # get indices of ploidy changes
+    ploidy_change_i = np.concatenate(([0], np.where(MAP_ploidy[:-1] != MAP_ploidy[1:])[0] + 1))
+    reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'locus', 'ploidy', 'max_posterior',
+                                         'min_posterior', 'mean_posterior', 'loglikelihood_diff'])
+
+    # if no mutations detected
+    if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
+        locus = '{}:{}-{}'.format(targets_to_test[0]['chrom'], targets_to_test[0]['start'],
+                                  targets_to_test[first_baseline_i - 1]['end'])
+
+        data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]), locus, norm_copy_num,
+                np.amax(copy_posteriors[:first_baseline_i, norm_index]), np.amin(copy_posteriors[:first_baseline_i, norm_index]),
+                np.mean(copy_posteriors[:first_baseline_i, norm_index]), loglike_diff]
+        reporting_df.loc[0] = data
+
+    # full data for combined mutations
+    for i, t_index in enumerate(ploidy_change_i):
+        if MAP_ploidy[t_index] != norm_copy_num:
+            end_t_index = ploidy_change_i[i + 1] - 1 if i < len(ploidy_change_i) else first_baseline_i - 1
+            target_set = (target_columns[t_index] if (i == len(ploidy_change_i)-1 or ploidy_change_i[i + 1] == t_index + 1) else
+                          '{}-{}'.format(target_columns[t_index], target_columns[end_t_index]))
+            locus = '{}:{}-{}'.format(targets_to_test[0]['chrom'], targets_to_test[t_index]['start'],
+                                      targets_to_test[end_t_index]['end'])
+
+            cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
+            posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
+
+            data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, locus, MAP_ploidy[t_index],
+                    np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set), loglike_diff]
+            reporting_df.loc[i] = data
+
+    reporting_df.to_csv('{}_summary.txt'.format(outputFile), sep='\t')
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
