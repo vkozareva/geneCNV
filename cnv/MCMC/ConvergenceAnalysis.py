@@ -92,8 +92,6 @@ class ConvergenceAnalysis(object):
                     logging.warning(('Poor convergence even after {} iterations; '
                                      'checking for metastability error next. \nPSRF (log-likelihood): '
                                      '{}\nprop PSRF (intensities) < 1.1: {}'.format(max_iterations, psrf_loglikes, np.mean(psrf_intensities < 1.1))))
-                    self.n_iterations = max_iterations
-                    self.burn_in_prop = orig_burn_in_prop + 0.05
                     break
                 # reset burn-in proportion
                 self.burn_in_prop = orig_burn_in_prop
@@ -149,11 +147,15 @@ class ConvergenceAnalysis(object):
             self.burn_in_prop += 0.05
             tries += 1
 
-        self.burn_in_prop -= 0.05
-        logging.info(('Completed Gelman-Rubin convergence analysis. Used {} iterations and {} burn-in prop.\nPSRF (log-likelihood): '
-                      '{}\nprop PSRF (intensities) < 1.1: {}\nmean PSRF (intensities): {}'.format(self.n_iterations, (self.burn_in_prop),
-                                                                                                  psrf_loglikes, np.mean(psrf_intensities < 1.1),
-                                                                                                  np.mean(psrf_intensities))))
+        if self.n_iterations > max_iterations:
+            self.n_iterations = max_iterations
+            self.burn_in_prop = orig_burn_in_prop
+        else:
+            self.burn_in_prop -= 0.05
+            logging.info(('Completed Gelman-Rubin convergence analysis. Used {} iterations and {} burn-in prop.'
+                          '\nPSRF (log-likelihood): {}\nprop PSRF (intensities) < 1.1: {}\nmean PSRF '
+                          '(intensities): {}'.format(self.n_iterations, (self.burn_in_prop), psrf_loglikes,
+                                                     np.mean(psrf_intensities < 1.1), np.mean(psrf_intensities))))
 
         # fill in data from one of the converged chains -- if converged, should not really matter which one
         # note running with 0 iterations
