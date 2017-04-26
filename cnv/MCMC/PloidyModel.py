@@ -68,7 +68,7 @@ class PloidyModel(object):
                     i + 1, self.ploidy, self.likelihoods[i]))
 
         # Log acceptance ratio at end
-        logging.info('Acceptance ratio: {}'.format(np.mean(self.acceptance)))
+        logging.info('Acceptance ratio: {}'.format((np.mean(self.acceptance) if n_iterations > 0 else 'None')))
 
         # Combine with any previously computed sampling data
         # all or none should be passed in

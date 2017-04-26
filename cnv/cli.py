@@ -70,7 +70,7 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
 @command('evaluate-sample')
 def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
-                    exclude_covar=False, no_gelman_rubin=False, num_chains=3, norm_cutoff=0.5):
+                    exclude_covar=False, no_gelman_rubin=False, num_chains=4, max_iterations=25000, norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -85,6 +85,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
     :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
     :param num_chains: Number of independent chains to use during G-R analysis
+    :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
     """
@@ -122,11 +123,12 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
                                                exclude_covar, n_iterations, burn_in_prop)
     if not no_gelman_rubin:
-        convergence_analysis.gelman_rubin_analysis(num_chains, len(targets_to_test))
+        convergence_analysis.gelman_rubin_analysis(num_chains, len(targets_to_test), max_iterations=max_iterations)
 
     # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
     # note that this will only catch metastabality errors that lead to false positives, not false negatives
-    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(norm_copy_num, autocor_slice)
+    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(norm_copy_num, autocor_slice,
+                                                                                      max_iterations=max_iterations)
 
     logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
 
