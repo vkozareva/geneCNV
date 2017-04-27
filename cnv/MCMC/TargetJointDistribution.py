@@ -59,8 +59,8 @@ class TargetJointDistribution(object):
             jump_previous = 0
 
         # calculate unnormalized log joint likelihood
-        joint_proposed = self.log_joint_likelihood(copies_proposed, intensities_proposed)
-        joint_previous = self.log_joint_likelihood(copies, intensities)
+        joint_proposed = self.log_joint_likelihood(intensities_proposed, copies_proposed)
+        joint_previous = self.log_joint_likelihood(intensities, copies)
 
         log_test_ratio = joint_proposed + jump_previous - joint_previous - jump_proposed
 
@@ -71,14 +71,16 @@ class TargetJointDistribution(object):
         else:
             return copies[target_index], intensities[target_index], 0.0
 
-    def log_joint_likelihood(self, copies, intensities):
+    def log_joint_likelihood(self, intensities, copies, return_neg=False):
         """ Returns unnormalized log likelihood of joint probability given subject data, full set of copy numbers and
             full set of intensities."""
         log_joint = (np.sum(self.data) * -1 * np.log(np.sum(np.multiply(copies, np.exp(intensities)))) +
                      np.sum(np.multiply(self.data, (np.log(copies) + intensities))) +
                      (-0.5 * np.dot(np.dot((intensities - self.mu_full).reshape((1,-1)), self.inv_covariance_full),
                                     (intensities - self.mu_full).reshape((-1,1)))))
-        return log_joint
+        if return_neg:
+            log_joint *= -1.
+        return log_joint[0][0]
 
     @staticmethod
     def get_conditional_mvn(mu, cov, index, intensities=None, matrix_comp=None, return_matrix_comp=False):

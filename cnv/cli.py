@@ -9,11 +9,10 @@ from mando import command
 
 import utilities as cnv_util
 from coverage_matrix import CoverageMatrix
-from MCMC.PloidyModel import PloidyModel
 from LogisticNormal import hln_EM
 from hln_parameters import HLN_Parameters
 from MCMC.VisualizeMCMC import VisualizeMCMC
-
+from MCMC.ConvergenceAnalysis import ConvergenceAnalysis
 
 @command('create-matrix')
 def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
@@ -56,7 +55,7 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
         unwanted_filters = unwanted_filters.split(',')
 
     if target_argfile:
-        targets_params = {'targets': targets,
+        targets_params = {'full_targets': targets,
                           'unwanted_filters': unwanted_filters,
                           'min_dist': min_dist}
         with open(target_argfile, 'w') as f:
@@ -70,7 +69,8 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, exclude_covar=False, norm_cutoff=0.3):
+def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
+                    exclude_covar=False, no_gelman_rubin=False, num_chains=4, max_iterations=25000, norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -78,8 +78,14 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                            instance of HLN_Parameters (mu, covariance, targets)
     :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
                        and one .pdf displaying stacked bar chart)
-    :param n_iterations: The number of MCMC iterations desired
+    :param n_iterations: The number of MCMC iterations desired (should be divisible by 100)
+    :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period (should be divisible by 0.05)
+    :param autocor_slice: The autocorrelation slice coefficient to use when reporting posterior probabilities
+                          ie. only every 50th iteration will be kept
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
+    :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
+    :param num_chains: Number of independent chains to use during G-R analysis
+    :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
     """
@@ -87,38 +93,57 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     # Read the parameters file.
     targets_params = cPickle.load(open(parametersFile, 'rb'))
-    targets = targets_params['parameters'].targets
+    full_targets = targets_params['full_targets']
+    targets_to_test = targets_params['parameters'].targets
 
     # Parse subject bamfile
     subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters'],
-                                min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], targets)
+                                min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], full_targets)
     subject_id = subject_df['subject'][0]
+
     # get 'normal' copy number based on whether subject is male or female
     norm_copy_num = 1. if subject_id[0] == 'M' else 2.
-    target_columns = [target['label'] for target in targets]
+    target_columns = [target['label'] for target in targets_to_test]
     subject_data = subject_df[target_columns].values.astype('float')
 
-    # add option to expand this support later?
-    # note that having 0 in support causes problems in the joint probability calculation
-    cnv_support = [1e-10, 1, 2] if subject_id[0] == 'M' else [1, 2, 3]
-    # until normalization against other genes, initializing with most probable normal state
-    # These states are fixed for the baseline targets.
-    initial_ploidy = norm_copy_num * np.ones(len(targets))
+    # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
+    cnv_support = np.array([1e-10, 1, 2, 3]).astype(float)
 
-    ploidy_model = PloidyModel(cnv_support, targets_params['parameters'], data=subject_data,
-                               ploidy=initial_ploidy, exclude_covar=exclude_covar)
-    ploidy_model.RunMCMC(n_iterations)
-    copy_posteriors = ploidy_model.ReportMCMCData()
+    # Check if baseline targets exist
+    first_baseline_i = len(targets_to_test) # In case there are no baseline targets.
+    for i in xrange(len(targets_to_test)):
+        if targets_to_test[i]['label'].startswith('Baseline'):
+            first_baseline_i = i
+            logging.info('Using {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in targets_to_test[i]
+                                                                                           ['label'] else 'individual'),
+                                                                                           len(full_targets) - first_baseline_i))
+            break
 
+    # ploidy model (and sampling) actually run within convergence analysis instance
+    convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
+                                               exclude_covar, n_iterations, burn_in_prop)
+    if not no_gelman_rubin:
+        convergence_analysis.gelman_rubin_analysis(num_chains, len(targets_to_test), max_iterations=max_iterations)
+
+    # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
+    # note that this will only catch metastabality errors that lead to false positives, not false negatives
+    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(norm_copy_num, autocor_slice,
+                                                                                      max_iterations=max_iterations)
+
+    logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
+
+    # Create dataframe for reporting
     mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
     mcmc_df['Target'] = target_columns
     mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
 
-    visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors)
+    # Create stacked bar plot and write to pdf
+    visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors[:first_baseline_i])
     visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
 
-    for target_i in xrange(len(copy_posteriors)):
-        norm_i = cnv_support.index(norm_copy_num)
+    # Log targets which seem to have abnormal copy numbers
+    for target_i in xrange(len(copy_posteriors[:first_baseline_i])):
+        norm_i = np.where(cnv_support == norm_copy_num)[0][0]
         if copy_posteriors[target_i][norm_i] < norm_cutoff:
             high_copy = np.argmax(copy_posteriors[target_i])
             high_posterior = copy_posteriors[target_i][high_copy]
@@ -127,12 +152,17 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
 
 @command('train-model')
-def train_model(targetsFile, coverageMatrixFile, outputFile, fit_diag_only=False):
+def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
+                fit_diag_only=False):
     """Train a model that detects copy number variation.
 
     :param targetsFile: Pickled file containing target intervals and CoverageMatrix arguments
     :param coverageMatrixFile: CSV file containing coverage data for all samples of interest
     :param outputFile: Output file name, returns CoverageMatrix arguments, and HLN_Parameters object in pickled dict
+    :param use_baseline_sum: Train on sum of baseline targets, instead of each baseline target individually, will return error if
+                             no baseline targets found
+    :param max_iterations: Maximum number of iterations to use during EM routine before termination
+    :param tol: Tolerance for convergence at which to terminate during EM routine
     :param fit_diag_only: if True, will return diagonal matrix after fitting only variances (all off-diag 0)
     """
     logging.info("Running sample training.")
@@ -142,7 +172,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, fit_diag_only=False
     # Read the targets file.
     with open(targetsFile) as f:
         targets_params = cPickle.load(f)
-        targets = targets_params['targets']
+        targets = targets_params['full_targets']
 
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
@@ -153,9 +183,23 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, fit_diag_only=False
     # Log the list of subjects actually used, with ratios, and perhaps some other stats.
     logging.info('Subjects trained:\n{}'.format(coverage_df[['id', 'date', 'gender', 'TSID_ratio']]))
 
+    # Get the appropriate target columns
+    targetCols = [target['label'] for target in targets]
+    if use_baseline_sum:
+        # assuming all targets listed before baselines -- get index of first one
+        first_baseline_i = targets.index(next(target for target in targets if target['label'].startswith('Baseline')))
+        targetCols = targetCols[:first_baseline_i] + ['BaselineSum']
+        targets = targets_params['full_targets'][:first_baseline_i]
+        sum_target = {
+            'chrom': '{}-{}'.format(targets_params['full_targets'][first_baseline_i]['chrom'],
+                                    targets_params['full_targets'][-1]['chrom']),
+            'start': None,
+            'end': None,
+            'label': 'BaselineSum'
+        }
+        targets.append(sum_target)
     # Run some sanity checks.
     errors = 0
-    targetCols = [target['label'] for target in targets]
     for index, subject in coverage_df.iterrows():
         # Every subject has coverage for every target.
         for targetCol in targetCols:
@@ -169,13 +213,13 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, fit_diag_only=False
 
     # Compute the logistic normal hyperparameters.
     # Omit the non-target columns.
-    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=150, tol=1e-11,
-                            fit_diag_only=fit_diag_only)
+    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=max_iterations,
+                            tol=tol, fit_diag_only=fit_diag_only)
 
     # Pickle the intervals, hyperparameters and CoverageMatrix arguments into the outputFile.
+    logging.info('Trained for {} total targets'.format(len(targets)))
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     targets_params['parameters'] = HLN_Parameters(targets, mu, covariance)
-    del targets_params['targets']
     with open(outputFile, 'w') as f:
         cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
