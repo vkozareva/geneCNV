@@ -183,10 +183,12 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
             cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
             posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
 
-            data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, locus, MAP_ploidy[t_index],
-                    np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set), loglike_diff]
+            data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, locus,
+                    round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
+                    np.mean(posterior_set), loglike_diff]
             reporting_df.loc[i] = data
 
+    reporting_df['ploidy'] = reporting_df['ploidy'].astype(int)
     reporting_df.to_csv('{}_summary.txt'.format(outputFile), sep='\t')
 
 @command('train-model')
