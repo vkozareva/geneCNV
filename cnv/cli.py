@@ -158,35 +158,39 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     MAP_ploidy = np.take(cnv_support, np.argmax(copy_posteriors[:first_baseline_i], axis=1))
     # get indices of ploidy changes
     ploidy_change_i = np.concatenate(([0], np.where(MAP_ploidy[:-1] != MAP_ploidy[1:])[0] + 1))
-    reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'chrom', 'start', 'end', 'ploidy',
+    reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'num_targets', 'chrom', 'start', 'end', 'ploidy',
                                          'max_posterior', 'min_posterior', 'mean_posterior', 'loglikelihood_diff'])
 
     # if no mutations detected
     if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
+        posterior_set = copy_posteriors[:first_baseline_i, norm_index]
+
+        # first_baseline_i also corresponds to length of non-baseline targets in targets_to_test
         data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]),
-                targets_to_test[0]['chrom'], targets_to_test[0]['start'], targets_to_test[first_baseline_i - 1]['end'],
-                norm_copy_num, np.amax(copy_posteriors[:first_baseline_i, norm_index]),
-                np.amin(copy_posteriors[:first_baseline_i, norm_index]),
-                np.mean(copy_posteriors[:first_baseline_i, norm_index]), loglike_diff]
+                first_baseline_i, targets_to_test[0]['chrom'], targets_to_test[0]['start'],
+                targets_to_test[first_baseline_i - 1]['end'], norm_copy_num,
+                np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set), loglike_diff]
         reporting_df.loc[0] = data
+    else:
+        # full data for combined mutations
+        for i, t_index in enumerate(ploidy_change_i):
+            if MAP_ploidy[t_index] != norm_copy_num:
+                end_t_index = ploidy_change_i[i + 1] - 1 if i < len(ploidy_change_i) - 1 else first_baseline_i - 1
+                target_set = (target_columns[t_index] if t_index == end_t_index else
+                              '{}-{}'.format(target_columns[t_index], target_columns[end_t_index]))
+                num_targets = end_t_index - t_index + 1
 
-    # full data for combined mutations
-    for i, t_index in enumerate(ploidy_change_i):
-        if MAP_ploidy[t_index] != norm_copy_num:
-            end_t_index = ploidy_change_i[i + 1] - 1 if i < len(ploidy_change_i) else first_baseline_i - 1
-            target_set = (target_columns[t_index] if (i == len(ploidy_change_i)-1 or ploidy_change_i[i + 1] == t_index + 1) else
-                          '{}-{}'.format(target_columns[t_index], target_columns[end_t_index]))
+                cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
+                posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
 
-            cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
-            posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
+                data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, num_targets,
+                        targets_to_test[0]['chrom'], targets_to_test[t_index]['start'], targets_to_test[end_t_index]['end'],
+                        round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
+                        np.mean(posterior_set), loglike_diff]
+                reporting_df.loc[i] = data
 
-            data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set,
-                    targets_to_test[0]['chrom'], targets_to_test[t_index]['start'], targets_to_test[end_t_index]['end'],
-                    round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
-                    np.mean(posterior_set), loglike_diff]
-            reporting_df.loc[i] = data
-
-    reporting_df[['start', 'end', 'ploidy']] = reporting_df[['start', 'end', 'ploidy']].applymap(int)
+    reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
+                                                                            'end', 'ploidy']].applymap(int)
     reporting_df.to_csv('{}_summary.txt'.format(outputFile), sep='\t')
 
 @command('train-model')
