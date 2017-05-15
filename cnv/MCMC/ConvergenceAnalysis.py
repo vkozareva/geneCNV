@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from scipy.stats import mode
 import multiprocessing
 from contextlib import contextmanager
 from PloidyModel import PloidyModel
@@ -163,7 +164,7 @@ class ConvergenceAnalysis(object):
         self.ploidy_model.initStates(*run_params[0][0])  # access stored data
         self.ploidy_model.RunMCMC(0, *run_params[0][1][1:])  # access sampling args (skip n_iterations)
 
-    def metastability_error_analysis(self, norm_copy_num, grad_threshold=0.35, thresh_loglike_diff=-30, autocor_slice=50,
+    def metastability_error_analysis(self, grad_threshold=0.35, thresh_loglike_diff=-30, autocor_slice=50,
                                      max_iterations=25000, max_tries=5):
         """Checks for metastability error (causing false positives) in MCMC sampling results. Compares optimized
         log-likelihood of normal ploidy state and reported ploidy state -- assumes that normal ploidy state should not
@@ -185,7 +186,8 @@ class ConvergenceAnalysis(object):
             self.ploidy_model.RunMCMC(self.n_iterations)
 
         copy_posteriors = self.ploidy_model.ReportMCMCData(int(round(self.burn_in_prop * self.n_iterations)), autocor_slice)
-        loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
+        self.get_norm_copy_num(copy_posteriors)
+        loglike_diff = self.ploidy_model.LikelihoodComparison(self.norm_copy_num)
 
         tries = 0
         iter_step_size = int(round(self.n_iterations * 0.5))
@@ -198,7 +200,7 @@ class ConvergenceAnalysis(object):
                 self.ploidy_model.initStates()
                 self.ploidy_model.RunMCMC(self.n_iterations)
                 copy_posteriors = self.ploidy_model.ReportMCMCData(self.burn_in, autocor_slice)
-                loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
+                loglike_diff = self.ploidy_model.LikelihoodComparison(self.norm_copy_num)
 
             # first choose more appropriate burn-in before increasing n_iterations again
             if loglike_diff < thresh_loglike_diff:
@@ -208,7 +210,7 @@ class ConvergenceAnalysis(object):
                 logging.info('Setting burn-in to {} on run {}'.format(self.burn_in, tries))
 
                 copy_posteriors = self.ploidy_model.ReportMCMCData(self.burn_in, autocor_slice)
-                loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
+                loglike_diff = self.ploidy_model.LikelihoodComparison(self.norm_copy_num)
             tries += 1
             # increase number of iterations with tries unless already large number
             if self.n_iterations < max_iterations:
@@ -216,3 +218,13 @@ class ConvergenceAnalysis(object):
 
         return copy_posteriors, loglike_diff
 
+    def get_norm_copy_num(self, copy_posteriors):
+        """Determines most likely 'normal ploidy' number on X chromosome targets
+        (essentially determining sex of sample)
+        """
+        if self.hln_parameters.targets[0]['chrom'] == 'X':
+            # determine most common copy number in target set
+            MAP_ploidy = np.take(self.cnv_support, np.argmax(copy_posteriors[:self.first_baseline_i], axis=1))
+            self.norm_copy_num = float(mode(MAP_ploidy)[0][0])
+        else:
+            self.norm_copy_num = 2.

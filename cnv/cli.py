@@ -100,9 +100,6 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters'],
                                 min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], full_targets)
     subject_id = subject_df['subject'][0]
-
-    # get 'normal' copy number based on whether subject is male or female
-    norm_copy_num = 1. if subject_id[0] == 'M' else 2.
     target_columns = [target['label'] for target in targets_to_test]
     subject_data = subject_df[target_columns].values.astype('float')
 
@@ -118,6 +115,8 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                                                                                            ['label'] else 'individual'),
                                                                                            len(full_targets) - first_baseline_i))
             break
+    # Report target coverage
+    logging.info('Target coverage: {}'.format(np.sum(subject_data[:, :first_baseline_i])))
 
     # ploidy model (and sampling) actually run within convergence analysis instance
     convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
@@ -127,8 +126,10 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
     # note that this will only catch metastabality errors that lead to false positives, not false negatives
-    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(norm_copy_num, autocor_slice,
+    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(autocor_slice,
                                                                                       max_iterations=max_iterations)
+    norm_copy_num = convergence_analysis.norm_copy_num
+    logging.info('Evaluating with normal copy number: {}'.format(norm_copy_num))
 
     logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
 
