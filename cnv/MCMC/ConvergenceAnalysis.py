@@ -23,6 +23,7 @@ def run_mcmc_wrapper(run_params):
         stored_data, sampling_args, iter_step_size = run_params
 
         # run chain using passed data
+        np.random.seed()
         convergence_analysis_instance.ploidy_model.initStates(*stored_data)
         convergence_analysis_instance.ploidy_model.RunMCMC(*sampling_args)
 
@@ -96,7 +97,7 @@ class ConvergenceAnalysis(object):
                 # reset burn-in proportion
                 self.burn_in_prop = orig_burn_in_prop
                 logging.info(('Performing Gelman-Rubin analysis with {} iterations and burn-in '
-                              'prop of {}.'.format(self.n_iterations, self.burn_in_prop, psrf_loglikes, np.mean(psrf_intensities))))
+                              'prop of {}.'.format(self.n_iterations, self.burn_in_prop)))
 
                 # convergence_analysis_instance = self
                 # set up multiprocessing
