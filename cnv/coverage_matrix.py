@@ -82,49 +82,42 @@ class CoverageMatrix(object):
         return unique_panel_intervals
 
     @staticmethod
-    def get_sample_info(RG, bwa_version, date_modified):
+    def get_sample_info(RG):
         """ Gather identifying info for each sample """
-        try:
-            # normal RG['ID'] format: FCLR-GP01-2121_1-M1-1_HGGF5AFXX-L004
-            subject, specimen_sample, flow_cell_lane = RG['ID'].split('_')
-        except ValueError:
-            # older RG['ID'] format: FPWB-0000-429L_1-P1-1
-            subject, specimen_sample = RG['ID'].split('_')
-            flow_cell_id = None
+        subject = RG.get('SM')
+
+        # Get the gender for GP subjects as the first letter in the subject ID
+        gender = subject[0] if subject and subject[0] in ('M', 'F') else None
+
+        specimen = RG.get('LB')
+        if specimen:
+            # Get the baits for GP subjects, which indicate if the sample was sequenced under TruSight One (T), Inherited Disease (P), or mixed (M)
+            baits_results = re.findall(r'([MTP])\d$', specimen)
+            baits = baits_results[0] if baits_results else None
         else:
-            flow_cell_id, __ = flow_cell_lane.rsplit('-', 1)
+            baits = None
 
-        # simulated CNV subjects have one of these suffixes in this field
-        if 'del' in RG['SM'] or 'dup' in RG['SM']:
-            subject = RG['SM']
+        # Get the flow_cell_id, removing the lane if provided
+        flow_cell_id = RG.get('PU')
+        if flow_cell_id and flow_cell_id[-5:-2] == '-L0':
+            flow_cell_id, __ = flow_cell_id.rsplit('-', 1)
 
-        gender = subject[0]
-        if specimen_sample.startswith(('ACGT', 'Omega')):
-            lab, specimen_num, baits, sample = specimen_sample.split('.')
-            specimen_num = '{}_{}'.format(lab, specimen_num)
-        else:
-            specimen_num, baits, sample = specimen_sample.split('-')
-        specimen = '{}_{}'.format(subject, specimen_num)
-        sample = '{}_{}'.format(subject, specimen_sample)
-        full_id = RG['ID']
-
-        sample_info = [full_id, subject, specimen, sample, gender, baits[0], flow_cell_id, bwa_version, date_modified]
+        sample_info = [subject, specimen, gender, baits, flow_cell_id]
         return sample_info
 
-    def get_subject_info(self, bamfile, date_modified, base_headers):
+    def get_subject_info(self, bamfile, base_headers):
         """ Gather identifying info for each subject, checking for differences between samples """
-        bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
         subject_info = []
         for RG in bamfile.header['RG']:
-            sample_info = self.get_sample_info(RG, bwa_version, date_modified)
+            sample_info = self.get_sample_info(RG)
             if not subject_info:
                 subject_info = sample_info
-            elif subject_info[1:] != sample_info[1:]:
+            elif subject_info != sample_info:
                 # Check if a subject has multiple different values for any of the headers
-                for sample1, sample2, id_header in zip(subject_info[1:], sample_info[1:], base_headers):
+                for sample1, sample2, id_header in zip(subject_info, sample_info, base_headers):
                     if sample1 != sample2:
                         self.logger.warning('{} has multiple different header values in the {} field: {} vs {}'.format(
-                            subject_info[1], id_header, sample1, sample2))
+                            subject_info[0], id_header, sample1, sample2))
         return subject_info
 
     def get_unique_panel_reads(self, bamfile_path, unique_panel_intervals):
@@ -175,10 +168,9 @@ class CoverageMatrix(object):
         unique_panel_intervals = self.get_unique_panel_intervals()
 
         # Initiate matrix headers
-        base_headers = [
-            'id', 'subject', 'specimen', 'sample', 'gender', 'baits', 'flow_cell_id',
-            'bwa_version', 'date_modified', 'TSID_only', 'TSO_only']
-        full_headers = base_headers + [target['label'] for target in targets]
+        base_headers = ['subject', 'specimen', 'gender', 'baits', 'flow_cell_id']
+        extra_headers = ['bwa_version', 'date_modified', 'TSID_only', 'TSO_only']
+        full_headers = base_headers + extra_headers + [target['label'] for target in targets]
 
         skipped_counts = {}
         coverage_matrix = []
@@ -205,19 +197,23 @@ class CoverageMatrix(object):
                 util.stop_err('{} is missing an index'.format(bamfile_path))
 
             # Get identifying info for each subject
+            subject_info = self.get_subject_info(bamfile, base_headers)
             date_modified = os.path.getmtime(bamfile_path)
-            subject_info = self.get_subject_info(bamfile, date_modified, base_headers)
+            bwa_version = next((PG['VN'] for PG in bamfile.header['PG'] if PG.get('ID') == 'bwa'), None)
 
             # Get subject coverage vector
             subj_coverage_vector = self.get_subject_coverage(bamfile, targets, skipped_counts=skipped_counts)
             if subj_coverage_vector.count(0) * 2 > len(targets):
-                self.logger.warning('{} is missing coverage for more than half of its targets'.format(subject_info[1]))
+                self.logger.warning('{} is missing coverage for more than half of its targets'.format(subject_info[0]))
 
             # Get counts of reads in unique panel regions
             unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals)
+            if unique_panel_reads['TSID'] == unique_panel_reads['TSO'] == 0:
+                self.logger.warning('{} does not have any coverage that is unique to either TSO or TSID'.format(subject_info[0]))
 
             # Create subject row with all needed info for the subject, and add to the coverage_matrix
-            full_subj_vector = subject_info + [unique_panel_reads['TSID'], unique_panel_reads['TSO']] + subj_coverage_vector
+            extra_data = [bwa_version, date_modified, unique_panel_reads['TSID'], unique_panel_reads['TSO']]
+            full_subj_vector = subject_info + extra_data + subj_coverage_vector
             if len(full_subj_vector) != len(full_headers):
                 util.stop_err('Unequal number of columns ({}) vs headers ({})'.format(len(full_subj_vector), len(full_headers)))
             coverage_matrix.append(full_subj_vector)
