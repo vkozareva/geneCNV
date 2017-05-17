@@ -45,8 +45,11 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
         with open(targets_bed_file) as f:
             for line in f:
                 line = line.rstrip('\r\n')
-                chrom, start, end, name = line.split('\t')
-                targets.append({'chrom': chrom, 'start': int(start), 'end': int(end), 'label': name})
+                target_data = line.split('\t')
+                # convert start and end coordinates to integers for samtools
+                target_data[1:3] = map(int, target_data[1:3])
+                keys = ['chrom', 'start', 'end', 'label'] + (['extra'] if len(target_data) > 4 else [])
+                targets.append(dict(zip(keys, target_data)))
     else:
         logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
         sys.exit(1)
@@ -159,18 +162,23 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     MAP_ploidy = np.take(cnv_support, np.argmax(copy_posteriors[:first_baseline_i], axis=1))
     # get indices of ploidy changes
     ploidy_change_i = np.concatenate(([0], np.where(MAP_ploidy[:-1] != MAP_ploidy[1:])[0] + 1))
-    reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'num_targets', 'chrom', 'start', 'end', 'ploidy',
-                                         'max_posterior', 'min_posterior', 'mean_posterior', 'loglikelihood_diff'])
+    reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'num_targets', 'chrom',
+                                         'start', 'end', 'ploidy', 'max_posterior', 'min_posterior',
+                                         'mean_posterior', 'loglikelihood_diff', 'extra_data'])
 
     # if no mutations detected
     if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
         posterior_set = copy_posteriors[:first_baseline_i, norm_index]
 
+        extra_ind = [i for i,d in enumerate(targets_to_test) if 'extra' in d]
+        extra = '-'.join({targets_to_test[i]['extra'] for i in extra_ind}) if extra_ind else None
+
         # first_baseline_i also corresponds to length of non-baseline targets in targets_to_test
         data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]),
                 first_baseline_i, targets_to_test[0]['chrom'], targets_to_test[0]['start'],
                 targets_to_test[first_baseline_i - 1]['end'], norm_copy_num,
-                np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set), loglike_diff]
+                np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set),
+                loglike_diff, extra]
         reporting_df.loc[0] = data
     else:
         # full data for combined mutations
@@ -184,10 +192,13 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                 cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
                 posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
 
+                extra_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if 'extra' in d]
+                extra = '-'.join({targets_to_test[j]['extra'] for j in extra_ind}) if extra_ind else None
+
                 data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, num_targets,
                         targets_to_test[0]['chrom'], targets_to_test[t_index]['start'], targets_to_test[end_t_index]['end'],
                         round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
-                        np.mean(posterior_set), loglike_diff]
+                        np.mean(posterior_set), loglike_diff, extra]
                 reporting_df.loc[i] = data
 
     reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
