@@ -233,12 +233,15 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
 
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
-    # convert dates to datetime
-    coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
-    coverage_df['date'] = coverage_df.date_modified.dt.date
 
-    # Log the list of subjects actually used, with ratios, and perhaps some other stats.
-    logging.info('Subjects trained:\n{}'.format(coverage_df[['id', 'date', 'gender', 'TSID_ratio']]))
+    # Log useful values if included in coverage matrix
+    if 'TSID_ratio' in coverage_df.columns:
+        # convert dates to datetime
+        coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
+        coverage_df['date'] = coverage_df.date_modified.dt.date
+
+        # Log the list of subjects actually used, with ratios, and perhaps some other stats.
+        logging.info('Subjects trained:\n{}'.format(coverage_df[['subject', 'date', 'TSID_ratio']]))
 
     # Get the appropriate target columns
     targetCols = [target['label'] for target in targets]
@@ -261,10 +264,10 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
         # Every subject has coverage for every target.
         for targetCol in targetCols:
             if targetCol not in subject:
-                logging.error('Subject {} is missing target {}.'.format(subject['id'], targetCol))
+                logging.error('Subject {} is missing target {}.'.format(subject['subject'], targetCol))
                 errors += 1
             elif subject[targetCol] == 0:
-                logging.warning('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
+                logging.warning('Subject {} has no coverage for target {}.'.format(subject['subject'], targetCol))
     if errors > 0:
         sys.exit(1)
 
