@@ -222,8 +222,6 @@ class CoverageMatrix(object):
 
             # Get counts of reads in unique panel regions
             unique_panel_reads = self.get_unique_panel_reads(bamfile_path, unique_panel_intervals, subject_id)
-            if unique_panel_reads['TSID'] == unique_panel_reads['TSO'] == 0:
-                self.logger.warning('{} does not have any coverage that is unique to either TSO or TSID'.format(subject_id))
 
             # Create subject row with all needed info for the subject, and add to the coverage_matrix
             extra_data = [bwa_version, date_modified, unique_panel_reads['TSID'], unique_panel_reads['TSO']]
