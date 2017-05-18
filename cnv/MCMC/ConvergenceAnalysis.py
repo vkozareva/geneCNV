@@ -93,9 +93,6 @@ class ConvergenceAnalysis(object):
                 posterior_intensities = np.zeros((num_chains, self.n_iterations, n_test_targets))
 
                 if self.n_iterations > max_iterations:
-                    logging.warning(('Poor convergence even after {} iterations; '
-                                     'checking for metastability error next. \nPSRF (log-likelihood): '
-                                     '{}\nprop PSRF (intensities) < 1.1: {}'.format(max_iterations, psrf_loglikes, np.mean(psrf_intensities < 1.1))))
                     break
                 # reset burn-in proportion
                 self.burn_in_prop = orig_burn_in_prop
@@ -157,17 +154,28 @@ class ConvergenceAnalysis(object):
         if self.n_iterations > max_iterations:
             self.n_iterations = max_iterations
             self.burn_in_prop = orig_burn_in_prop
+            self.converged = False
+
+            logging.warning(('Poor convergence even after {} iterations; '
+                             'checking for metastability error next. Resetting '
+                             'to {} iterations and {} burn-in.'.format(max_iterations, max_iterations, self.burn_in_prop)))
+
         else:
             self.burn_in_prop -= 0.05
+            self.converged = True
+
             logging.info(('Completed Gelman-Rubin convergence analysis. Used {} iterations and {} burn-in prop.'
                           '\nPSRF (log-likelihood): {}\nprop PSRF (intensities) < 1.1: {}\nmean PSRF '
                           '(intensities): {}'.format(self.n_iterations, (self.burn_in_prop), psrf_loglikes,
                                                      np.mean(psrf_intensities < 1.1), np.mean(psrf_intensities))))
 
-        # fill in data from one of the converged chains -- if converged, should not really matter which one
+        # get index of chain with highest recent log-likelihoods (only really matters if chains did not converge)
+        latest_loglikes = [np.mean(params[1][3][-3000:]) for params in run_params]
+        best_chain_i = np.argmax(latest_loglikes)
+
         # note running with 0 iterations
-        self.ploidy_model.initStates(*run_params[0][0])  # access stored data
-        self.ploidy_model.RunMCMC(0, *run_params[0][1][1:])  # access sampling args (skip n_iterations)
+        self.ploidy_model.initStates(*run_params[best_chain_i][0])  # access stored data
+        self.ploidy_model.RunMCMC(0, *run_params[best_chain_i][1][1:])  # access sampling args (skip n_iterations)
 
     def metastability_error_analysis(self, grad_threshold=0.35, thresh_loglike_diff=-30, autocor_slice=50,
                                      max_iterations=25000, max_tries=5):
