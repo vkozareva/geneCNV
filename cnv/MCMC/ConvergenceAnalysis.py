@@ -37,7 +37,8 @@ def run_mcmc_wrapper(run_params):
 
 class ConvergenceAnalysis(object):
     """A class for analyzing convergence and metastability error of MCMC sampler, given specific data and parameters. """
-    def __init__(self, cnv_support, hln_parameters, data, first_baseline_i, exclude_covar, n_iterations, burn_in_prop):
+    def __init__(self, cnv_support, hln_parameters, data, first_baseline_i=None, exclude_covar=False,
+                 n_iterations=10000, burn_in_prop=0.3, use_single_process=False):
         self.cnv_support = cnv_support
         self.hln_parameters = hln_parameters
         self.data = data
@@ -45,6 +46,7 @@ class ConvergenceAnalysis(object):
         self.exclude_covar = exclude_covar
         self.n_iterations = n_iterations
         self.burn_in_prop = burn_in_prop
+        self.use_single_process = use_single_process
         self.ploidy_model = PloidyModel(self.cnv_support, self.hln_parameters, data=self.data,
                                         first_baseline_i=self.first_baseline_i, exclude_covar=self.exclude_covar)
 
@@ -100,10 +102,13 @@ class ConvergenceAnalysis(object):
                 logging.info(('Performing Gelman-Rubin analysis with {} iterations and burn-in '
                               'prop of {}.'.format(self.n_iterations, self.burn_in_prop)))
 
-                # convergence_analysis_instance = self
-                # set up multiprocessing
-                pool = multiprocessing.Pool()
-                run_params = pool.map(run_mcmc_wrapper, run_params)
+                if self.use_single_process:
+                    for c_i in range(num_chains):
+                        run_params[c_i] = run_mcmc_wrapper(run_params[c_i])
+                else:
+                    # set up multiprocessing
+                    pool = multiprocessing.Pool()
+                    run_params = pool.map(run_mcmc_wrapper, run_params)
 
                 # get appropriate data from returned run_params
                 for c_i in range(num_chains):

@@ -73,7 +73,8 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
 @command('evaluate-sample')
 def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
-                    exclude_covar=False, no_gelman_rubin=False, num_chains=4, max_iterations=25000, norm_cutoff=0.5):
+                    exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
+                    norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -87,7 +88,9 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                           ie. only every 50th iteration will be kept
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
     :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
-    :param num_chains: Number of independent chains to use during G-R analysis
+    :param num_chains: Number of independent chains to use during G-R analysis, will use separate process for each unless
+                       specified
+    :param use_single_process: Will not use multiprocessing during G-R analysis
     :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
@@ -123,7 +126,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     # ploidy model (and sampling) actually run within convergence analysis instance
     convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
-                                               exclude_covar, n_iterations, burn_in_prop)
+                                               exclude_covar, n_iterations, burn_in_prop, use_single_process)
     if not no_gelman_rubin:
         convergence_analysis.gelman_rubin_analysis(num_chains, len(targets_to_test), max_iterations=max_iterations)
 
