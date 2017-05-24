@@ -104,11 +104,12 @@ class PloidyModel(object):
         magnitude indicate multimodality in target distribution and that sampler has gotten stuck in
         non-optimal mode.
 
-        norm_copy_num -- The normal ploidy number for all targets in a non-carrier individual
+        norm_copy_num -- The normal ploidy number for all non-baseline targets in a non-carrier individual
         """
         # get mode ploidy state for each target and generate normal ploidy state
         MAP_ploidy = np.take(self.cnv_support, np.argmax(self.copy_posteriors, axis=1))
         normal_ploidy = norm_copy_num * np.ones(self.n_targets)
+        normal_ploidy[self.first_baseline_i:] = 2.
 
         args_map = (MAP_ploidy, True)
         args_norm = (normal_ploidy, True)

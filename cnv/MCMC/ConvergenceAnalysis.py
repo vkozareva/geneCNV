@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from scipy.stats import mode
 import multiprocessing
 from contextlib import contextmanager
 from PloidyModel import PloidyModel
@@ -23,6 +24,7 @@ def run_mcmc_wrapper(run_params):
         stored_data, sampling_args, iter_step_size = run_params
 
         # run chain using passed data
+        np.random.seed()
         convergence_analysis_instance.ploidy_model.initStates(*stored_data)
         convergence_analysis_instance.ploidy_model.RunMCMC(*sampling_args)
 
@@ -35,7 +37,8 @@ def run_mcmc_wrapper(run_params):
 
 class ConvergenceAnalysis(object):
     """A class for analyzing convergence and metastability error of MCMC sampler, given specific data and parameters. """
-    def __init__(self, cnv_support, hln_parameters, data, first_baseline_i, exclude_covar, n_iterations, burn_in_prop):
+    def __init__(self, cnv_support, hln_parameters, data, first_baseline_i=None, exclude_covar=False,
+                 n_iterations=10000, burn_in_prop=0.3, use_single_process=False):
         self.cnv_support = cnv_support
         self.hln_parameters = hln_parameters
         self.data = data
@@ -43,6 +46,7 @@ class ConvergenceAnalysis(object):
         self.exclude_covar = exclude_covar
         self.n_iterations = n_iterations
         self.burn_in_prop = burn_in_prop
+        self.use_single_process = use_single_process
         self.ploidy_model = PloidyModel(self.cnv_support, self.hln_parameters, data=self.data,
                                         first_baseline_i=self.first_baseline_i, exclude_covar=self.exclude_covar)
 
@@ -89,21 +93,19 @@ class ConvergenceAnalysis(object):
                 posterior_intensities = np.zeros((num_chains, self.n_iterations, n_test_targets))
 
                 if self.n_iterations > max_iterations:
-                    logging.warning(('Poor convergence even after {} iterations; '
-                                     'checking for metastability error next. \nPSRF (log-likelihood): '
-                                     '{}\nprop PSRF (intensities) < 1.1: {}'.format(max_iterations, psrf_loglikes, np.mean(psrf_intensities < 1.1))))
-                    self.n_iterations = max_iterations
-                    self.burn_in_prop = orig_burn_in_prop + 0.05
                     break
                 # reset burn-in proportion
                 self.burn_in_prop = orig_burn_in_prop
                 logging.info(('Performing Gelman-Rubin analysis with {} iterations and burn-in '
-                              'prop of {}.'.format(self.n_iterations, self.burn_in_prop, psrf_loglikes, np.mean(psrf_intensities))))
+                              'prop of {}.'.format(self.n_iterations, self.burn_in_prop)))
 
-                # convergence_analysis_instance = self
-                # set up multiprocessing
-                pool = multiprocessing.Pool()
-                run_params = pool.map(run_mcmc_wrapper, run_params)
+                if self.use_single_process:
+                    for c_i in range(num_chains):
+                        run_params[c_i] = run_mcmc_wrapper(run_params[c_i])
+                else:
+                    # set up multiprocessing
+                    pool = multiprocessing.Pool()
+                    run_params = pool.map(run_mcmc_wrapper, run_params)
 
                 # get appropriate data from returned run_params
                 for c_i in range(num_chains):
@@ -149,18 +151,33 @@ class ConvergenceAnalysis(object):
             self.burn_in_prop += 0.05
             tries += 1
 
-        self.burn_in_prop -= 0.05
-        logging.info(('Completed Gelman-Rubin convergence analysis. Used {} iterations and {} burn-in prop.\nPSRF (log-likelihood): '
-                      '{}\nprop PSRF (intensities) < 1.1: {}\nmean PSRF (intensities): {}'.format(self.n_iterations, (self.burn_in_prop),
-                                                                                                  psrf_loglikes, np.mean(psrf_intensities < 1.1),
-                                                                                                  np.mean(psrf_intensities))))
+        if self.n_iterations > max_iterations:
+            self.n_iterations = max_iterations
+            self.burn_in_prop = orig_burn_in_prop
+            self.converged = False
 
-        # fill in data from one of the converged chains -- if converged, should not really matter which one
+            logging.warning(('Poor convergence even after {} iterations; '
+                             'checking for metastability error next. Resetting '
+                             'to {} iterations and {} burn-in.'.format(max_iterations, max_iterations, self.burn_in_prop)))
+
+        else:
+            self.burn_in_prop -= 0.05
+            self.converged = True
+
+            logging.info(('Completed Gelman-Rubin convergence analysis. Used {} iterations and {} burn-in prop.'
+                          '\nPSRF (log-likelihood): {}\nprop PSRF (intensities) < 1.1: {}\nmean PSRF '
+                          '(intensities): {}'.format(self.n_iterations, (self.burn_in_prop), psrf_loglikes,
+                                                     np.mean(psrf_intensities < 1.1), np.mean(psrf_intensities))))
+
+        # get index of chain with highest recent log-likelihoods (only really matters if chains did not converge)
+        latest_loglikes = [np.mean(params[1][3][-3000:]) for params in run_params]
+        best_chain_i = np.argmax(latest_loglikes)
+
         # note running with 0 iterations
-        self.ploidy_model.initStates(*run_params[0][0])  # access stored data
-        self.ploidy_model.RunMCMC(0, *run_params[0][1][1:])  # access sampling args (skip n_iterations)
+        self.ploidy_model.initStates(*run_params[best_chain_i][0])  # access stored data
+        self.ploidy_model.RunMCMC(0, *run_params[best_chain_i][1][1:])  # access sampling args (skip n_iterations)
 
-    def metastability_error_analysis(self, norm_copy_num, grad_threshold=0.35, thresh_loglike_diff=-30, autocor_slice=50,
+    def metastability_error_analysis(self, grad_threshold=0.35, thresh_loglike_diff=-30, autocor_slice=50,
                                      max_iterations=25000, max_tries=5):
         """Checks for metastability error (causing false positives) in MCMC sampling results. Compares optimized
         log-likelihood of normal ploidy state and reported ploidy state -- assumes that normal ploidy state should not
@@ -182,7 +199,8 @@ class ConvergenceAnalysis(object):
             self.ploidy_model.RunMCMC(self.n_iterations)
 
         copy_posteriors = self.ploidy_model.ReportMCMCData(int(round(self.burn_in_prop * self.n_iterations)), autocor_slice)
-        loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
+        self.get_norm_copy_num(copy_posteriors)
+        loglike_diff = self.ploidy_model.LikelihoodComparison(self.norm_copy_num)
 
         tries = 0
         iter_step_size = int(round(self.n_iterations * 0.5))
@@ -195,7 +213,7 @@ class ConvergenceAnalysis(object):
                 self.ploidy_model.initStates()
                 self.ploidy_model.RunMCMC(self.n_iterations)
                 copy_posteriors = self.ploidy_model.ReportMCMCData(self.burn_in, autocor_slice)
-                loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
+                loglike_diff = self.ploidy_model.LikelihoodComparison(self.norm_copy_num)
 
             # first choose more appropriate burn-in before increasing n_iterations again
             if loglike_diff < thresh_loglike_diff:
@@ -205,7 +223,7 @@ class ConvergenceAnalysis(object):
                 logging.info('Setting burn-in to {} on run {}'.format(self.burn_in, tries))
 
                 copy_posteriors = self.ploidy_model.ReportMCMCData(self.burn_in, autocor_slice)
-                loglike_diff = self.ploidy_model.LikelihoodComparison(norm_copy_num)
+                loglike_diff = self.ploidy_model.LikelihoodComparison(self.norm_copy_num)
             tries += 1
             # increase number of iterations with tries unless already large number
             if self.n_iterations < max_iterations:
@@ -213,3 +231,13 @@ class ConvergenceAnalysis(object):
 
         return copy_posteriors, loglike_diff
 
+    def get_norm_copy_num(self, copy_posteriors):
+        """Determines most likely 'normal ploidy' number on X chromosome targets
+        (essentially determining sex of sample)
+        """
+        if self.hln_parameters.targets[0]['chrom'] == 'X':
+            # determine most common copy number in target set
+            MAP_ploidy = np.take(self.cnv_support, np.argmax(copy_posteriors[:self.first_baseline_i], axis=1))
+            self.norm_copy_num = float(mode(MAP_ploidy)[0][0])
+        else:
+            self.norm_copy_num = 2.

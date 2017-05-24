@@ -45,8 +45,11 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
         with open(targets_bed_file) as f:
             for line in f:
                 line = line.rstrip('\r\n')
-                chrom, start, end, name = line.split('\t')
-                targets.append({'chrom': chrom, 'start': int(start), 'end': int(end), 'label': name})
+                target_data = line.split('\t')
+                # convert start and end coordinates to integers for samtools
+                target_data[1:3] = map(int, target_data[1:3])
+                keys = ['chrom', 'start', 'end', 'label'] + (['extra'] if len(target_data) > 4 else [])
+                targets.append(dict(zip(keys, target_data)))
     else:
         logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
         sys.exit(1)
@@ -70,7 +73,8 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
 @command('evaluate-sample')
 def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
-                    exclude_covar=False, no_gelman_rubin=False, num_chains=4, max_iterations=25000, norm_cutoff=0.5):
+                    exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
+                    norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -84,7 +88,9 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                           ie. only every 50th iteration will be kept
     :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
     :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
-    :param num_chains: Number of independent chains to use during G-R analysis
+    :param num_chains: Number of independent chains to use during G-R analysis, will use separate process for each unless
+                       specified
+    :param use_single_process: Will not use multiprocessing during G-R analysis
     :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
@@ -100,9 +106,6 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters'],
                                 min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], full_targets)
     subject_id = subject_df['subject'][0]
-
-    # get 'normal' copy number based on whether subject is male or female
-    norm_copy_num = 1. if subject_id[0] == 'M' else 2.
     target_columns = [target['label'] for target in targets_to_test]
     subject_data = subject_df[target_columns].values.astype('float')
 
@@ -118,23 +121,30 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                                                                                            ['label'] else 'individual'),
                                                                                            len(full_targets) - first_baseline_i))
             break
+    # Report target coverage
+    logging.info('Target coverage: {}'.format(np.sum(subject_data[:, :first_baseline_i])))
 
     # ploidy model (and sampling) actually run within convergence analysis instance
     convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
-                                               exclude_covar, n_iterations, burn_in_prop)
+                                               exclude_covar, n_iterations, burn_in_prop, use_single_process)
     if not no_gelman_rubin:
         convergence_analysis.gelman_rubin_analysis(num_chains, len(targets_to_test), max_iterations=max_iterations)
 
     # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
     # note that this will only catch metastabality errors that lead to false positives, not false negatives
-    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(norm_copy_num, autocor_slice,
+    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(autocor_slice,
                                                                                       max_iterations=max_iterations)
+    norm_copy_num = convergence_analysis.norm_copy_num
+    logging.info('Evaluating with normal copy number: {}'.format(norm_copy_num))
 
     logging.info('Difference in optimized mode and expected ploidy likelihoods is {}'.format(loglike_diff))
 
-    # Create dataframe for reporting
+    # Create dataframe for reporting copy number posteriors
     mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
-    mcmc_df['Target'] = target_columns
+    mcmc_df['target'] = target_columns
+    mcmc_df['chrom'] = [target['chrom'] for target in targets_to_test]
+    mcmc_df['start'] = [target['start'] for target in targets_to_test]
+    mcmc_df['end'] = [target['end'] for target in targets_to_test]
     mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
 
     # Create stacked bar plot and write to pdf
@@ -142,14 +152,61 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
 
     # Log targets which seem to have abnormal copy numbers
+    norm_index = np.where(cnv_support == norm_copy_num)[0][0]
+
     for target_i in xrange(len(copy_posteriors[:first_baseline_i])):
-        norm_i = np.where(cnv_support == norm_copy_num)[0][0]
-        if copy_posteriors[target_i][norm_i] < norm_cutoff:
+        if copy_posteriors[target_i][norm_index] < norm_cutoff:
             high_copy = np.argmax(copy_posteriors[target_i])
             high_posterior = copy_posteriors[target_i][high_copy]
-            logging.info('{} has a posterior probability of {} of having {} copies'.format(target_columns[target_i],
-                                                                                           high_posterior, cnv_support[high_copy]))
+            logging.info(('{} has a posterior probability of {} of having '
+                          '{} copies'.format(target_columns[target_i], high_posterior, cnv_support[high_copy])))
 
+    # create summary file of all mutations
+    MAP_ploidy = np.take(cnv_support, np.argmax(copy_posteriors[:first_baseline_i], axis=1))
+    # get indices of ploidy changes
+    ploidy_change_i = np.concatenate(([0], np.where(MAP_ploidy[:-1] != MAP_ploidy[1:])[0] + 1))
+    reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'num_targets', 'chrom',
+                                         'start', 'end', 'ploidy', 'max_posterior', 'min_posterior',
+                                         'mean_posterior', 'loglikelihood_diff', 'extra_data'])
+
+    # if no mutations detected
+    if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
+        posterior_set = copy_posteriors[:first_baseline_i, norm_index]
+
+        extra_ind = [i for i,d in enumerate(targets_to_test) if 'extra' in d]
+        extra = '-'.join({targets_to_test[i]['extra'] for i in extra_ind}) if extra_ind else None
+
+        # first_baseline_i also corresponds to length of non-baseline targets in targets_to_test
+        data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]),
+                first_baseline_i, targets_to_test[0]['chrom'], targets_to_test[0]['start'],
+                targets_to_test[first_baseline_i - 1]['end'], norm_copy_num,
+                np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set),
+                loglike_diff, extra]
+        reporting_df.loc[0] = data
+    else:
+        # full data for combined mutations
+        for i, t_index in enumerate(ploidy_change_i):
+            if MAP_ploidy[t_index] != norm_copy_num:
+                end_t_index = ploidy_change_i[i + 1] - 1 if i < len(ploidy_change_i) - 1 else first_baseline_i - 1
+                target_set = (target_columns[t_index] if t_index == end_t_index else
+                              '{}-{}'.format(target_columns[t_index], target_columns[end_t_index]))
+                num_targets = end_t_index - t_index + 1
+
+                cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
+                posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
+
+                extra_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if 'extra' in d]
+                extra = '-'.join({targets_to_test[j]['extra'] for j in extra_ind}) if extra_ind else None
+
+                data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, num_targets,
+                        targets_to_test[0]['chrom'], targets_to_test[t_index]['start'], targets_to_test[end_t_index]['end'],
+                        round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
+                        np.mean(posterior_set), loglike_diff, extra]
+                reporting_df.loc[i] = data
+
+    reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
+                                                                            'end', 'ploidy']].applymap(int)
+    reporting_df.to_csv('{}_summary.txt'.format(outputFile), sep='\t')
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
@@ -176,12 +233,15 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
 
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
-    # convert dates to datetime
-    coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
-    coverage_df['date'] = coverage_df.date_modified.dt.date
 
-    # Log the list of subjects actually used, with ratios, and perhaps some other stats.
-    logging.info('Subjects trained:\n{}'.format(coverage_df[['id', 'date', 'gender', 'TSID_ratio']]))
+    # Log useful values if included in coverage matrix
+    if 'TSID_ratio' in coverage_df.columns:
+        # convert dates to datetime
+        coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
+        coverage_df['date'] = coverage_df.date_modified.dt.date
+
+        # Log the list of subjects actually used, with ratios, and perhaps some other stats.
+        logging.info('Subjects trained:\n{}'.format(coverage_df[['subject', 'date', 'TSID_ratio']]))
 
     # Get the appropriate target columns
     targetCols = [target['label'] for target in targets]
@@ -204,10 +264,10 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
         # Every subject has coverage for every target.
         for targetCol in targetCols:
             if targetCol not in subject:
-                logging.error('Subject {} is missing target {}.'.format(subject['id'], targetCol))
+                logging.error('Subject {} is missing target {}.'.format(subject['subject'], targetCol))
                 errors += 1
             elif subject[targetCol] == 0:
-                logging.warning('Subject {} has no coverage for target {}.'.format(subject['id'], targetCol))
+                logging.warning('Subject {} has no coverage for target {}.'.format(subject['subject'], targetCol))
     if errors > 0:
         sys.exit(1)
 
