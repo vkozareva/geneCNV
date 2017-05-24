@@ -13,6 +13,14 @@ from LogisticNormal import hln_EM
 from hln_parameters import HLN_Parameters
 from MCMC.VisualizeMCMC import VisualizeMCMC
 from MCMC.ConvergenceAnalysis import ConvergenceAnalysis
+from cnv import __version__
+
+@command('version')
+def version():
+    """Provide the current version"""
+    version_id = 'cnv v{}\n'.format(__version__)
+    sys.stdout.write(version_id)
+    sys.exit()
 
 @command('create-matrix')
 def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
