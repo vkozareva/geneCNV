@@ -29,7 +29,7 @@ class CoverageMatrixTests(unittest.TestCase):
         self.assertEqual(util.interval_intersect(*unique_panel_intervals.values()), [],
                          'The unique_panel_intervals are supposed to be unique to each panel, but they overlap with each other')
 
-        unique_panel_reads = self.matrix_instance.get_unique_panel_reads(EXAMPLE_BAM_PATH, unique_panel_intervals)
+        unique_panel_reads = self.matrix_instance.get_unique_panel_reads(EXAMPLE_BAM_PATH, unique_panel_intervals, 'example_bam')
         self.assertNotEqual(sum(unique_panel_reads.values()), 0, 'The example bam has no coverage unique to either panel')
         # Following lines are commented out for now because example.bam is only for DMD, but unique panel intervals
         # looks at coverage across the entire X chromosome
@@ -39,7 +39,7 @@ class CoverageMatrixTests(unittest.TestCase):
 
     def test_subject_coverage(self):
         aligned_bamfile = pysam.AlignmentFile(EXAMPLE_BAM_PATH, 'rb')
-        coverage_vector = self.matrix_instance.get_subject_coverage(aligned_bamfile, self.targets)
+        coverage_vector = self.matrix_instance.get_subject_coverage(aligned_bamfile, self.targets, 'example_bam')
         self.assertEqual(len(coverage_vector), len(self.targets),
                          'There are {} targets but the coverage_vector has length {}'.format(len(self.targets), len(coverage_vector)))
         self.assertEqual(coverage_vector.count(0), 0, 'The example bamfile has 0 coverage in one of the targets')
