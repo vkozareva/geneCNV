@@ -14,6 +14,8 @@ from hln_parameters import HLN_Parameters
 from MCMC.VisualizeMCMC import VisualizeMCMC
 from MCMC.ConvergenceAnalysis import ConvergenceAnalysis
 from cnv import __version__
+from cnv.Targets import Target
+from cnv.utilities import SimulateData
 
 @command('version')
 def version():
@@ -23,10 +25,10 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
+def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
     """ Create coverage_matrix from given bamfiles_fofn.
 
-    :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
+    :param bamfiles_fofn: File containing the paths to all BAM files to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param target_argfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
@@ -43,23 +45,10 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
     if bamfiles_fofn.endswith('.bam'):
         bamfiles_fofn = bamfiles_fofn.split(',')
-    if wanted_gene and targets_bed_file:
-        logging.error("Both --wanted_gene and --targets_bed_file were specified (only one is allowed).")
-        sys.exit(1)
-    elif wanted_gene:
-        targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
     elif targets_bed_file:
-        targets = []
-        with open(targets_bed_file) as f:
-            for line in f:
-                line = line.rstrip('\r\n')
-                target_data = line.split('\t')
-                # convert start and end coordinates to integers for samtools
-                target_data[1:3] = map(int, target_data[1:3])
-                keys = ['chrom', 'start', 'end', 'label'] + (['extra'] if len(target_data) > 4 else [])
-                targets.append(dict(zip(keys, target_data)))
+        targets = Target.Target.load_from_bed_file(targets_bed_file)
     else:
-        logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
+        logging.error("--targets_bed_file must be specified.")
         sys.exit(1)
 
     if unwanted_filters is not None:
@@ -290,6 +279,18 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     targets_params['parameters'] = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
         cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+
+@command('create-bams')
+def create_bams(targets_file, output_prefix):
+    """
+    Makes simulated data to run the program with, given a target bed file and an output file prefix.
+
+    :param targetsFile: A BED file with targets to simulate coverage for.
+    :param outputPrefix: an output file prefix used to name the output bam and fofn file.
+    :return:
+    """
+    SimulateData.make_simulated_data(output_prefix, targets_file)
+
 
 if __name__ == '__main__':
     main()

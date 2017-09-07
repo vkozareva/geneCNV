@@ -1,12 +1,25 @@
+import sys
+import os
+
 class Target(object):
     """A simple class which holds a genomic region."""
-    __slots__ = ('chrom', 'start', 'end')
+    __slots__ = ('chrom', 'start', 'end', 'id')
 
-    def __init__(self, chrom, start, end):
-        """Create a new target region with start (inclusive) and end (exclusive)"""
+    def __init__(self, chrom, s=0, e=sys.maxint, id=""):
+        """
+        Create a new target region with start (inclusive) and end (exclusive)
+
+        :param chrom: string The chromsome, e.g. 'chrX'
+        :param s: int start
+        :param e: int end
+        :param id: The id of the files
+        """
+
+        """"""
         self.chrom = chrom
-        self.start = start
-        self.end = end
+        self.start = s
+        self.end = e
+        self.id = id
 
     def overlaps(self, other):
         assert isinstance(other, Target)
@@ -27,6 +40,9 @@ class Target(object):
         else:
             return chrom_comp
 
+    def __str__(self):
+        return "\t".join([self.chrom, str(self.start),
+                          str(self.end), self.id ])
     def __repr__(self):
         return '{}:{}-{}'.format(self.chrom, self.start, self.end)
 
@@ -48,3 +64,9 @@ class Target(object):
 
     def __ne__(self, other):
         return self.__cmp__(other.obj) != 0
+
+    @classmethod
+    def create_from_BED_string(cls, line):
+        sp = line.split("\t")
+        return cls(sp[0], int(sp[1]), int(sp[2]), sp[3])
+

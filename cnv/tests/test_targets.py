@@ -25,3 +25,16 @@ class TargetTests(unittest.TestCase):
         self.assertFalse(a.overlaps(c))
         c.start = 199
         self.assertTrue(a.overlaps(c))
+        i1 = Target("1", 10, 20, "")
+        i2 = Target("1", 19, 30, "")
+        i3 = Target("2", 200, 5000, "")
+        i4 = Target("1", 5000, 10000)
+        i5 = Target("1", 20, 25)
+        i6 = Target("1", 12, 17)
+        self.assertTrue(i1.overlaps(i2))
+        self.assertTrue(i2.overlaps(i1))
+        self.assertFalse(i3.overlaps(i1))
+        self.assertFalse(i4.overlaps(i1))
+        self.assertFalse(i5.overlaps(i1))
+        self.assertTrue(i6.overlaps(i1))
+
