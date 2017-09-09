@@ -35,10 +35,10 @@ class Target(object):
             start_cmp = cmp(self.start, other.start)
             if start_cmp == 0:
                 return cmp(other.end, self.end)     # Note, longest interval goes first
-            else:
-                return start_cmp
-        else:
-            return chrom_comp
+
+            return start_cmp
+
+        return chrom_comp
 
     def __str__(self):
         return "\t".join([self.chrom, str(self.start),

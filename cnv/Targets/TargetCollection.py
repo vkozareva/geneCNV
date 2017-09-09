@@ -21,7 +21,7 @@ class TargetCollection(object):
         if targets:
             for t in targets:
                 self.append(t)
-        if len(self._collection) > 0:
+        if self._collection: # Empty sequences are false
             self.merge_nearby_intervals(min_merge_dist)
 
 
