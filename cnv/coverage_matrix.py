@@ -39,7 +39,7 @@ class ReadGroups(object):
             # Clip lane number at end of e.g. HM2NMAFXX-L004 to get flow cell info
             tag_vals = [re.sub("\-L[0-9]{3}", "", k) for k in tag_vals]
         tag_vals = set(tag_vals)
-        if len(tag_vals) == 0:
+        if not tag_vals:
             logging.info('File: {} missing RG info for tag  {}.  Using value {}  instead'.format(bam_file_name,
                                                                                                  tag,
                                                                                                  default))
