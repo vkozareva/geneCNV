@@ -19,5 +19,5 @@ test:
     - mkdir tmp
     - cnv create-bams notebooks/DMD_targets.bed tmp/
     - cnv create-matrix notebooks/DMD_targets.bed tmp/files.fofn --outfile tmp/matrix.csv --target_argfile tmp/targs.p
-    - cnv train-model tmp/targs.p tmp/matrix.csv tmp/train.out
+    - cnv train-model --tol 0.0001 tmp/targs.p tmp/matrix.csv tmp/train.out
     - cnv evaluate-sample --no_gelman_rubin --n_iterations 1000 --use_single_process tmp/_bam_1.bam tmp/train.out tmp/results
