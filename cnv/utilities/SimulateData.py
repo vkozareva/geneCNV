@@ -7,7 +7,6 @@ import pysam
 from numpy.random import normal
 from numpy.random import poisson
 
-from cnv.Targets.Target import Target
 from cnv.Targets.TargetCollection import TargetCollection
 
 
@@ -43,25 +42,38 @@ def _write_fake_bam_file(bam_name, header, targets, intensities):
 
     with pysam.AlignmentFile(bam_name, "wb", header = header)as bamf:
         rname = 1
-        totalCoverage = 30 * len(targets)
+        totalCoverage = 500 * len(targets)
+
+        # Setup the standard dummy read
+        a = pysam.AlignedSegment()
+        a.mapping_quality = 60
+        a.is_proper_pair = True
+        a.is_reverse = True
+
+
         for intensity, t in zip(intensities, targets):
             s = t.start
             e = t.end
-            length = max(e - s, 10)
+            length = min(e - s, 10)
             numreads = poisson(totalCoverage * intensities)[0]
+            rid = name_to_index[t.chrom]
+            a.query_sequence = "A" * length
+            a.template_length = -length
+            a.cigar = [(0, length)]
+            a.reference_id = rid
+            a.next_reference_id = rid
+            a.reference_start = s
+            a.next_reference_start = s + length + 1
             for replicate in xrange(0, numreads):
-                a = pysam.AlignedSegment()
                 a.query_name = "Read_" + str(rname)
-                a.query_sequence = "A" * length
-                a.reference_id = name_to_index[t.chrom]
                 bamf.write(a)
+
                 rname += 1
-
-
-
+    pysam.index(bam_name)
 
 def make_simulated_data(output_prefix, target_file):
     _validate_file_names(output_prefix)
+
     _output_fofn(output_prefix)
 
     targets = TargetCollection.load_from_txt_file(target_file)
@@ -73,6 +85,7 @@ def make_simulated_data(output_prefix, target_file):
     # Write a bunch of bam files
     for bam in _make_bam_names(output_prefix):
         _write_fake_bam_file(bam, header, targets, intensities)
+
 
 
 

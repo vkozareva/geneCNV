@@ -28,8 +28,7 @@ setup(name='cnv',
       install_requires=required,
       include_package_data=True,
       package_data={'': ['inputs/*.txt', 'inputs/*.bed']},
-      dependency_links=['git+ssh://git@github.com/GenePeeks/genepeeks-science.git@develop#egg=genepeeks',
-                        'git+ssh://git@github.com/GenePeeks/biorest.git@master#egg=biorest'],
+      dependency_links=['git+ssh://git@github.com/GenePeeks/biorest.git@master#egg=biorest'],
       entry_points={
           'console_scripts': ['cnv=cnv.cli:main']
       },

@@ -7,7 +7,7 @@ import pysam
 from cnv.utilities import SimulateData
 from cnv.Targets.Target import Target
 from cnv.Targets.TargetCollection import TargetCollection
-
+from cnv.coverage_matrix import *
 
 def _makeFakeTargets():
     t1 = Target("1", 10, 200, "exon1")
@@ -32,3 +32,6 @@ class SimulatorTest(unittest.TestCase):
         self.assertTrue(os.path.exists(expected_fofn))
         os.remove(expected_fofn)
 
+        # Verify we can read those files
+        cm = CoverageMatrix()
+        cm.create_coverage_matrix(expected_fofn, targs)

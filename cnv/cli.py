@@ -1,21 +1,22 @@
+import cPickle
+import logging
 import sys
 
-import logging
-import cPickle
 import numpy as np
 import pandas as pd
-from mando import main
 from mando import command
+from mando import main
 
-import utilities as cnv_util
-from coverage_matrix import CoverageMatrix
 from LogisticNormal import hln_EM
-from hln_parameters import HLN_Parameters
-from MCMC.VisualizeMCMC import VisualizeMCMC
 from MCMC.ConvergenceAnalysis import ConvergenceAnalysis
+from MCMC.VisualizeMCMC import VisualizeMCMC
 from cnv import __version__
-from cnv.Targets import Target
+from cnv.Targets.TargetCollection import DEFAULT_MERGE_DISTANCE
+from cnv.Targets.TargetCollection import TargetCollection
 from cnv.utilities import SimulateData
+from coverage_matrix import CoverageMatrix
+from hln_parameters import HLN_Parameters
+
 
 @command('version')
 def version():
@@ -25,14 +26,14 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
+def create_matrix(targets_bed_file, bamfiles_fofn, outfile=None, target_argfile=None, unwanted_filters=None, min_dist=DEFAULT_MERGE_DISTANCE):
     """ Create coverage_matrix from given bamfiles_fofn.
 
+    :param targets_bed_file: Source of targets, and that may include baseline intervals
     :param bamfiles_fofn: File containing the paths to all BAM files to be included in the coverage_matrix
     :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
     :param target_argfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
-    :param targets_bed_file: Alternative source of targets, and that may include baseline intervals
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
@@ -45,8 +46,9 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, targets_bed_
 
     if bamfiles_fofn.endswith('.bam'):
         bamfiles_fofn = bamfiles_fofn.split(',')
-    elif targets_bed_file:
-        targets = Target.Target.load_from_bed_file(targets_bed_file)
+
+    if targets_bed_file:
+        targets = TargetCollection.load_from_txt_file(targets_bed_file, min_merge_dist=min_dist)
     else:
         logging.error("--targets_bed_file must be specified.")
         sys.exit(1)
@@ -61,7 +63,7 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, targets_bed_
         with open(target_argfile, 'w') as f:
             cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-    matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters, min_interval_separation=min_dist)
+    matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
     if outfile:
         coverage_matrix_df.to_csv(outfile)
@@ -100,10 +102,9 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     targets_to_test = targets_params['parameters'].targets
 
     # Parse subject bamfile
-    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters'],
-                                min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], full_targets)
-    subject_id = subject_df['subject'][0]
-    target_columns = [target['label'] for target in targets_to_test]
+    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectBamfilePath], full_targets)
+    subject_id = subject_df['sample'][0]
+    target_columns = [target.label for target in targets_to_test]
     subject_data = subject_df[target_columns].values.astype('float')
 
     # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
@@ -112,7 +113,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     # Check if baseline targets exist
     first_baseline_i = len(targets_to_test) # In case there are no baseline targets.
     for i in xrange(len(targets_to_test)):
-        if targets_to_test[i]['label'].startswith('Baseline'):
+        if targets_to_test[i].label.startswith('Baseline'):
             first_baseline_i = i
             logging.info('Using {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in targets_to_test[i]
                                                                                            ['label'] else 'individual'),
@@ -139,9 +140,9 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     # Create dataframe for reporting copy number posteriors
     mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
     mcmc_df['target'] = target_columns
-    mcmc_df['chrom'] = [target['chrom'] for target in targets_to_test]
-    mcmc_df['start'] = [target['start'] for target in targets_to_test]
-    mcmc_df['end'] = [target['end'] for target in targets_to_test]
+    mcmc_df['chrom'] = [target.chrom for target in targets_to_test]
+    mcmc_df['start'] = [target.start for target in targets_to_test]
+    mcmc_df['end'] = [target.end for target in targets_to_test]
     mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
 
     # Create stacked bar plot and write to pdf
@@ -170,13 +171,13 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
         posterior_set = copy_posteriors[:first_baseline_i, norm_index]
 
-        extra_ind = [i for i,d in enumerate(targets_to_test) if 'extra' in d]
-        extra = '-'.join({targets_to_test[i]['extra'] for i in extra_ind}) if extra_ind else None
+        extra_ind = [i for i,d in enumerate(targets_to_test) if d.name]
+        extra = '-'.join({targets_to_test[i].name for i in extra_ind}) if extra_ind else None
 
         # first_baseline_i also corresponds to length of non-baseline targets in targets_to_test
         data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]),
-                first_baseline_i, targets_to_test[0]['chrom'], targets_to_test[0]['start'],
-                targets_to_test[first_baseline_i - 1]['end'], norm_copy_num,
+                first_baseline_i, targets_to_test[0].chrom, targets_to_test[0].start,
+                targets_to_test[first_baseline_i - 1].end, norm_copy_num,
                 np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set),
                 loglike_diff, extra]
         reporting_df.loc[0] = data
@@ -192,11 +193,12 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                 cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
                 posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
 
-                extra_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if 'extra' in d]
-                extra = '-'.join({targets_to_test[j]['extra'] for j in extra_ind}) if extra_ind else None
+                # TODO: No Target object has an extra attribute, so not sure what this is about...
+                extra_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if d.name]
+                extra = '-'.join({targets_to_test[j].name for j in extra_ind}) if extra_ind else None
 
                 data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, num_targets,
-                        targets_to_test[0]['chrom'], targets_to_test[t_index]['start'], targets_to_test[end_t_index]['end'],
+                        targets_to_test[0].chrom, targets_to_test[t_index].start, targets_to_test[end_t_index].end,
                         round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
                         np.mean(posterior_set), loglike_diff, extra]
                 reporting_df.loc[i] = data
@@ -231,25 +233,16 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
 
-    # Log useful values if included in coverage matrix
-    if 'TSID_ratio' in coverage_df.columns:
-        # convert dates to datetime
-        coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
-        coverage_df['date'] = coverage_df.date_modified.dt.date
-
-        # Log the list of subjects actually used, with ratios, and perhaps some other stats.
-        logging.info('Subjects trained:\n{}'.format(coverage_df[['subject', 'date', 'TSID_ratio']]))
-
     # Get the appropriate target columns
-    targetCols = [target['label'] for target in targets]
+    targetCols = [target.label for target in targets]
     if use_baseline_sum:
         # assuming all targets listed before baselines -- get index of first one
-        first_baseline_i = targets.index(next(target for target in targets if target['label'].startswith('Baseline')))
+        first_baseline_i = targets.index(next(target for target in targets if target.label.startswith('Baseline')))
         targetCols = targetCols[:first_baseline_i] + ['BaselineSum']
         targets = targets_params['full_targets'][:first_baseline_i]
         sum_target = {
-            'chrom': '{}-{}'.format(targets_params['full_targets'][first_baseline_i]['chrom'],
-                                    targets_params['full_targets'][-1]['chrom']),
+            'chrom': '{}-{}'.format(targets_params['full_targets'][first_baseline_i].chrom,
+                                    targets_params['full_targets'][-1].chrom),
             'start': None,
             'end': None,
             'label': 'BaselineSum'
@@ -261,10 +254,10 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
         # Every subject has coverage for every target.
         for targetCol in targetCols:
             if targetCol not in subject:
-                logging.error('Subject {} is missing target {}.'.format(subject['subject'], targetCol))
+                logging.error('Sample {} is missing target {}.'.format(subject['sample'], targetCol))
                 errors += 1
             elif subject[targetCol] == 0:
-                logging.warning('Subject {} has no coverage for target {}.'.format(subject['subject'], targetCol))
+                logging.warning('Sample {} has no coverage for target {}.'.format(subject['sample'], targetCol))
     if errors > 0:
         sys.exit(1)
 

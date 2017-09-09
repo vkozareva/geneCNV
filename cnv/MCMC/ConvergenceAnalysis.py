@@ -235,7 +235,7 @@ class ConvergenceAnalysis(object):
         """Determines most likely 'normal ploidy' number on X chromosome targets
         (essentially determining sex of sample)
         """
-        if self.hln_parameters.targets[0]['chrom'] == 'X':
+        if self.hln_parameters.targets[0].chrom == 'X':
             # determine most common copy number in target set
             MAP_ploidy = np.take(self.cnv_support, np.argmax(copy_posteriors[:self.first_baseline_i], axis=1))
             self.norm_copy_num = float(mode(MAP_ploidy)[0][0])

@@ -16,5 +16,8 @@ test:
   override:
     - pylint cnv
     - nosetests cnv
-    - cnv evaluate-sample -h
-    - cnv create-matrix cnv/tests/data/example.bam --wanted_gene DMD
+    - mkdir tmp
+    - cnv create-bams notebooks/DMD_targets.bed tmp/
+    - cnv create-matrix notebooks/DMD_targets.bed tmp/files.fofn --outfile tmp/matrix.csv --target_argfile tmp/targs.p
+    - cnv train-model tmp/targs.p tmp/matrix.csv tmp/train.out
+    - cnv evaluate-sample --no_gelman_rubin --n_iterations 1000 --use_single_process tmp/_bam_1.bam tmp/train.out tmp/results
