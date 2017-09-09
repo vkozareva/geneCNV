@@ -11,15 +11,6 @@ requirements_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
 with open(requirements_file) as f:
     all_reqs = f.read().splitlines()
 
-required = [x for x in all_reqs if not x.startswith("git+")]
-# Need to manually add this since name is different than repo
-required.append('genepeeks')
-required.append('biorest')
-# Specially handle Git repos
-# https://mike.zwobble.org/2013/05/adding-git-or-hg-or-svn-dependencies-in-setup-py/
-gits = [x for x in all_reqs if x.startswith("git+")]
-
-
 setup(name='cnv',
       version=VERSION,
       url='https://github.com/genepeeks/dmd',
@@ -28,7 +19,7 @@ setup(name='cnv',
       install_requires=required,
       include_package_data=True,
       package_data={'': ['inputs/*.txt', 'inputs/*.bed']},
-      dependency_links=['git+ssh://git@github.com/GenePeeks/biorest.git@master#egg=biorest'],
+      dependency_links=[],
       entry_points={
           'console_scripts': ['cnv=cnv.cli:main']
       },
