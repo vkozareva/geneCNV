@@ -10,7 +10,7 @@ VERSION = __version__
 requirements_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
 with open(requirements_file) as f:
     all_reqs = f.read().splitlines()
-
+required = [x for x in all_reqs if not x.startswith("git+")]
 setup(name='cnv',
       version=VERSION,
       url='https://github.com/genepeeks/dmd',
