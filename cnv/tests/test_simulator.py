@@ -23,16 +23,15 @@ class SimulatorTest(unittest.TestCase):
         targs.write_to_txt_file(bedFile)
         SimulateData.make_simulated_data(outdir, bedFile)
 
-        expected_names = SimulateData._make_bam_names(outdir)
-        for n in expected_names:
-            self.assertTrue(os.path.exists(n))
-            os.remove(n)
-
         expected_fofn = SimulateData._make_fofn_name(outdir)
         self.assertTrue(os.path.exists(expected_fofn))
-
 
         # Verify we can read those files
         cm = CoverageMatrix()
         cm.create_coverage_matrix(expected_fofn, targs)
+
+        expected_names = SimulateData._make_bam_names(outdir)
+        for n in expected_names:
+            self.assertTrue(os.path.exists(n))
+            os.remove(n)
         os.remove(expected_fofn)
