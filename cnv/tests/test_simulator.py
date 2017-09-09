@@ -30,8 +30,9 @@ class SimulatorTest(unittest.TestCase):
 
         expected_fofn = SimulateData._make_fofn_name(outdir)
         self.assertTrue(os.path.exists(expected_fofn))
-        os.remove(expected_fofn)
+
 
         # Verify we can read those files
         cm = CoverageMatrix()
         cm.create_coverage_matrix(expected_fofn, targs)
+        os.remove(expected_fofn)
