@@ -28,17 +28,22 @@ class Target(object):
         return self.chrom == other.chrom and self.start < other.end and self.end > other.start
 
     def __cmp__(self, other):
-        """Orders by name, start, then largest length first"""
+        """Orders by chrom, start, then largest length first
+        Baseline targets will always be second"""
         assert isinstance(other, Target)
-        chrom_comp = cmp(self.chrom, other.chrom)
-        if chrom_comp == 0:
-            start_cmp = cmp(self.start, other.start)
-            if start_cmp == 0:
-                return cmp(other.end, self.end)     # Note, longest interval goes first
+        base_comp = cmp('Baseline' in self.label, 'Baseline' in other.label)
+        if base_comp == 0:
+            chrom_comp = cmp(self.chrom, other.chrom)
+            if chrom_comp == 0:
+                start_cmp = cmp(self.start, other.start)
+                if start_cmp == 0:
+                    return cmp(other.end, self.end)     # Note, longest interval goes first
 
-            return start_cmp
+                return start_cmp
 
-        return chrom_comp
+            return chrom_comp
+
+        return base_comp
 
     def __str__(self):
         return "\t".join([self.chrom, str(self.start),
@@ -54,7 +59,7 @@ class Target(object):
         return self.__cmp__(other) > 0
 
     def __eq__(self, other):
-        return self.__cmp__(other.obj) == 0
+        return self.__cmp__(other) == 0
 
     def __le__(self, other):
         return self.__cmp__(other.obj) <= 0

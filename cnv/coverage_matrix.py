@@ -210,7 +210,8 @@ class CoverageMatrix(object):
         coverage_df = pd.DataFrame(coverage_matrix, columns=headers)
 
         # Add a column for sum of all baseline counts, if any baseline targets exist
-        baseline_columns = [column for column in coverage_df.columns if column.startswith('Baseline')]
+        # Merged baselines must also contain 'Baseline'
+        baseline_columns = [column for column in coverage_df.columns if 'Baseline' in column]
         if baseline_columns:
             coverage_df['BaselineSum'] = np.sum(coverage_df[baseline_columns], axis=1)
 

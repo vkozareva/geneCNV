@@ -81,6 +81,11 @@ class TargetCollection(object):
             self._collection.sort()
             self._sorted = True
 
+    def t_index(self, item):
+        if not isinstance(item, Target):
+            raise TypeError('Object to find must be Target')
+        return self._collection.index(item)
+
     def make_fake_sam_header(self):
         """
         Makes a header to create a SAM/BAM file compatible with the regions defined
@@ -164,4 +169,3 @@ class TargetCollection(object):
 
     def __iter__(self):
         return self._collection.__iter__()
-

@@ -13,6 +13,7 @@ from MCMC.VisualizeMCMC import VisualizeMCMC
 from cnv import __version__
 from cnv.Targets.TargetCollection import DEFAULT_MERGE_DISTANCE
 from cnv.Targets.TargetCollection import TargetCollection
+from cnv.Targets.Target import Target
 from cnv.utilities import SimulateData
 from coverage_matrix import CoverageMatrix
 from hln_parameters import HLN_Parameters
@@ -113,10 +114,10 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
     # Check if baseline targets exist
     first_baseline_i = len(targets_to_test) # In case there are no baseline targets.
     for i in xrange(len(targets_to_test)):
-        if targets_to_test[i].label.startswith('Baseline'):
+        if 'Baseline' in targets_to_test[i].label:
             first_baseline_i = i
-            logging.info('Using {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in targets_to_test[i]
-                                                                                           ['label'] else 'individual'),
+            logging.info('Using {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in
+                                                                                           targets_to_test[i].label else 'individual'),
                                                                                            len(full_targets) - first_baseline_i))
             break
     # Report target coverage
@@ -237,16 +238,15 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     targetCols = [target.label for target in targets]
     if use_baseline_sum:
         # assuming all targets listed before baselines -- get index of first one
-        first_baseline_i = targets.index(next(target for target in targets if target.label.startswith('Baseline')))
+        first_baseline_i = targets.t_index(next(target for target in targets if 'Baseline' in target.label))
         targetCols = targetCols[:first_baseline_i] + ['BaselineSum']
+        # we can slice the TargetCollection
         targets = targets_params['full_targets'][:first_baseline_i]
-        sum_target = {
-            'chrom': '{}-{}'.format(targets_params['full_targets'][first_baseline_i].chrom,
-                                    targets_params['full_targets'][-1].chrom),
-            'start': None,
-            'end': None,
-            'label': 'BaselineSum'
-        }
+
+        chrom_span = '{}-{}'.format(targets_params['full_targets'][first_baseline_i].chrom,
+                                    targets_params['full_targets'][-1].chrom)
+        sum_target = Target(chrom_span, None, None, 'BaselineSum')
+
         targets.append(sum_target)
     # Run some sanity checks.
     errors = 0
