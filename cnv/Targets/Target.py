@@ -27,6 +27,23 @@ class Target(object):
         # return min(self.end, other.end) - max(self.start, other.start)
         return self.chrom == other.chrom and self.start < other.end and self.end > other.start
 
+    def merge(self, other):
+        """ Merges in another Target object, concatenating the names at least once,
+        and if more than one merge simply renaming the new interval as Merged-START:END
+        :param other the Target to merge in.
+        :returns A new target with the full extent of both intervals
+        """
+        assert isinstance(other, Target)
+        assert other.chrom == self.chrom
+        s = min(self.start, other.start)
+        e = max(self.end, other.end)
+        mergedString = "Merged-"
+        if self.label.count(mergedString) > 0 or other.label.count(mergedString) > 0:
+            new_name = mergedString + str(s) + ":" + str(e)
+        else:
+            new_name = mergedString + self.label + ":" + other.label
+        return Target(self.chrom, s, e, new_name)
+
     def __cmp__(self, other):
         """Orders by chrom, start, then largest length first
         Baseline targets will always be second"""
@@ -52,6 +69,8 @@ class Target(object):
         return '{}:{}-{}'.format(self.chrom, self.start, self.end)
 
     # Python 3 boilerplate
+    # In python 3 we can't simply implement the __cmp__ method but must implement
+    # all of these rich comparisons, added for forward compatibility
     def __lt__(self, other):
         return self.__cmp__(other) < 0
 
@@ -62,20 +81,20 @@ class Target(object):
         return self.__cmp__(other) == 0
 
     def __le__(self, other):
-        return self.__cmp__(other.obj) <= 0
+        return self.__cmp__(other) <= 0
 
     def __ge__(self, other):
-        return self.__cmp__(other.obj) >= 0
+        return self.__cmp__(other) >= 0
 
     def __ne__(self, other):
-        return self.__cmp__(other.obj) != 0
+        return self.__cmp__(other) != 0
 
     @classmethod
     def create_from_BED_string(cls, line):
         sp = line.strip().split("\t")
         if len(sp) == 5:
             return cls(sp[0], int(sp[1]), int(sp[2]), sp[3], sp[4])
-        if len(sp) == 4:
+        elif len(sp) == 4:
             return cls(sp[0], int(sp[1]), int(sp[2]), sp[3])
         elif len(sp) == 3:
             return cls(sp[0], int(sp[1]), int(sp[2]))

@@ -61,8 +61,7 @@ class TargetCollection(object):
             if space != DIF_CHROM_FLAG and space <= min_dist:
                 top = self._collection[cur_top]
                 bottom = self._collection[cur_top - 1]
-                new_name = "Merged-" + bottom.label + ":" + top.label
-                new_target = Target(top.chrom, bottom.start, top.end, new_name)
+                new_target = bottom.Target(top)
                 self._collection.pop(cur_top)
                 self._collection[cur_top - 1] = new_target
             cur_top -= 1

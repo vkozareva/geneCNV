@@ -45,6 +45,14 @@ class TargetTests(unittest.TestCase):
         self.assertTrue(merged.chrom == "A")
         self.assertTrue(merged.label.startswith("Merged"))
 
+    def test_merge(self):
+        a = Target("A", 150, 200)
+        b = Target("B", 180, 250)
+        c = a.merge(b)
+        self.assertTrue(c.start == 150)
+        self.assertTrue(c.end == 250)
+        d = c.merge(a)
+        self.assertTrue(d.label == "Merged-150:250")
 
     def test_targetOverlaps(self):
         a = Target("A", 150, 200)
