@@ -1,10 +1,11 @@
 import os
+from collections import MutableSequence
 from Target import Target
 
 DEFAULT_MERGE_DISTANCE = 629
 
 
-class TargetCollection(object):
+class TargetCollection(MutableSequence):
     """This class represents an arbitrary list of targets (e.g. DMD exons, TSID bait locations, etc). It
     is useful for organizing/merging targets. """
     def __init__(self, targets = None, min_merge_dist = DEFAULT_MERGE_DISTANCE):
@@ -67,12 +68,16 @@ class TargetCollection(object):
             cur_top -= 1
         self._merged = True
 
+    def _make_dirty(self):
+        """ Change the sorted and merged flags to indicate the list has been altered
+        since these operations occurred """
+        self._sorted = False
+        self._merged = False
 
     def append(self, item):
         if not isinstance(item, Target):
             raise TypeError("TargetCollection requires Target objects")
-        self._sorted = False
-        self._merged = False
+        self._make_dirty()
         self._collection.append(item)
 
     def sort(self):
@@ -163,8 +168,12 @@ class TargetCollection(object):
 
     def __setitem__(self, key, value):
         self._collection[key] = value
-        self._sorted = False
-        self._merged = False
+        self._make_dirty()
 
     def __iter__(self):
         return self._collection.__iter__()
+
+    def insert(self, index, value):
+        assert isinstance(value, Target)
+        self._collection.insert(index, value)
+        self._make_dirty()
