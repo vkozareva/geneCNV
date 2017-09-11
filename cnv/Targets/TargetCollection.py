@@ -14,6 +14,7 @@ class TargetCollection(MutableSequence):
         :param targets: a Collection
         :param min_merge_dist: The minimum distance that nearby intervals will be merged with
         """
+        super(TargetCollection, self).__init__()
         self._collection = list()
         self._sorted = False
         self._merged = False
@@ -62,7 +63,7 @@ class TargetCollection(MutableSequence):
             if space != DIF_CHROM_FLAG and space <= min_dist:
                 top = self._collection[cur_top]
                 bottom = self._collection[cur_top - 1]
-                new_target = bottom.Target(top)
+                new_target = bottom.merge(top)
                 self._collection.pop(cur_top)
                 self._collection[cur_top - 1] = new_target
             cur_top -= 1
@@ -74,11 +75,11 @@ class TargetCollection(MutableSequence):
         self._sorted = False
         self._merged = False
 
-    def append(self, item):
-        if not isinstance(item, Target):
+    def append(self, value):
+        if not isinstance(value, Target):
             raise TypeError("TargetCollection requires Target objects")
         self._make_dirty()
-        self._collection.append(item)
+        self._collection.append(value)
 
     def sort(self):
         if not self._sorted:
