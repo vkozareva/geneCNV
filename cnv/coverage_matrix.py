@@ -99,7 +99,6 @@ class CoverageMatrix(object):
     ]
 
     def __init__(self, unwanted_filters=None):
-        super(CoverageMatrix, self).__init__()
         self.logger = logging.getLogger(__name__)
         self.list_of_checks = self.filter_list_of_checks(unwanted_filters) if unwanted_filters else self.default_checks
 
