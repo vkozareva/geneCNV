@@ -35,3 +35,6 @@ class SimulatorTest(unittest.TestCase):
             self.assertTrue(os.path.exists(n))
             os.remove(n)
         os.remove(expected_fofn)
+
+if __name__ == '__main__':
+    unittest.main()

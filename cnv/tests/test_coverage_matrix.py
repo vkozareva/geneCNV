@@ -39,3 +39,6 @@ class CoverageMatrixTests(unittest.TestCase):
         self.assertEqual(len(coverage_vector), len(self.targets),
                          'There are {} targets but the coverage_vector has length {}'.format(len(self.targets), len(coverage_vector)))
         self.assertEqual(coverage_vector.count(0), 0, 'The example bamfile has 0 coverage in one of the targets')
+
+if __name__ == '__main__':
+    unittest.main()

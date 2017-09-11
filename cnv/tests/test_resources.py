@@ -22,3 +22,6 @@ class ResourceTest(unittest.TestCase):
     def test_dmd_exons_exist(self):
         dmdexons = inputs.get_dmd_exons()
         self.assertTrue(os.path.exists(dmdexons))
+
+if __name__ == '__main__':
+    unittest.main()

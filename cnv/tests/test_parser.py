@@ -18,3 +18,6 @@ class ParserTest(unittest.TestCase):
         # Confirm it matches result from:
         # samtools view example.bam X:31137344-33357726 | wc -l
         self.assertEquals(count, 14518)
+
+if __name__ == '__main__':
+    unittest.main()

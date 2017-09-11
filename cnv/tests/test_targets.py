@@ -67,3 +67,6 @@ class TargetTests(unittest.TestCase):
         self.assertFalse(i5.overlaps(i1))
         self.assertTrue(i6.overlaps(i1))
 
+if __name__ == '__main__':
+    unittest.main()
+

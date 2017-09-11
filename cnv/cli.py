@@ -26,13 +26,13 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(targets_bed_file, bamfiles_fofn, outfile=None, target_argfile=None, unwanted_filters=None, min_dist=DEFAULT_MERGE_DISTANCE):
-    """ Create coverage_matrix from given bamfiles_fofn.
+def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=None, unwanted_filters=None, min_dist=DEFAULT_MERGE_DISTANCE):
+    """ Create coverage_matrix from given bamfilesFofn.
 
-    :param targets_bed_file: Source of targets, and that may include baseline intervals
-    :param bamfiles_fofn: File containing the paths to all BAM files to be included in the coverage_matrix
-    :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
-    :param target_argfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
+    :param targetsBedfile: Source of targets, and that may include baseline intervals
+    :param bamfilesFofn: File containing the paths to all BAM files to be included in the coverage_matrix
+    :param outputFile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
+    :param targetArgfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
@@ -44,34 +44,34 @@ def create_matrix(targets_bed_file, bamfiles_fofn, outfile=None, target_argfile=
 
     """
 
-    if bamfiles_fofn.endswith('.bam'):
-        bamfiles_fofn = bamfiles_fofn.split(',')
+    if bamfilesFofn.endswith('.bam'):
+        bamfilesFofn = bamfilesFofn.split(',')
 
-    if targets_bed_file:
-        targets = TargetCollection.load_from_txt_file(targets_bed_file, min_merge_dist=min_dist)
+    if targetsBedfile:
+        targets = TargetCollection.load_from_txt_file(targetsBedfile, min_merge_dist=min_dist)
     else:
-        logging.error("--targets_bed_file must be specified.")
+        logging.error("--targetsBedfile must be specified.")
         sys.exit(1)
 
     if unwanted_filters is not None:
         unwanted_filters = unwanted_filters.split(',')
 
-    if target_argfile:
+    if targetArgfile:
         targets_params = {'full_targets': targets,
                           'unwanted_filters': unwanted_filters,
                           'min_dist': min_dist}
-        with open(target_argfile, 'w') as f:
+        with open(targetArgfile, 'w') as f:
             cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
     matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters)
-    coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
-    if outfile:
-        coverage_matrix_df.to_csv(outfile)
-        print 'Finished creating {}'.format(outfile)
+    coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfilesFofn, targets)
+    if outputFile:
+        coverage_matrix_df.to_csv(outputFile)
+        print 'Finished creating {}'.format(outputFile)
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
+def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
                     exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
                     norm_cutoff=0.5):
     """Test for copy number variation in a given sample
@@ -79,7 +79,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
     :param parametersFile: Pickled file containing a dict with CoverageMatrix arguments and
                            instance of HLN_Parameters (mu, covariance, targets)
-    :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
+    :param outputPrefix: Output file name without extension -- generates two output files (one .txt file of posteriors
                        and one .pdf displaying stacked bar chart)
     :param n_iterations: The number of MCMC iterations desired (should be divisible by 100)
     :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period (should be divisible by 0.05)
@@ -143,11 +143,11 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     mcmc_df['chrom'] = [target.chrom for target in targets_to_test]
     mcmc_df['start'] = [target.start for target in targets_to_test]
     mcmc_df['end'] = [target.end for target in targets_to_test]
-    mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
+    mcmc_df.to_csv('{}.txt'.format(outputPrefix), sep='\t')
 
     # Create stacked bar plot and write to pdf
     visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors[:first_baseline_i])
-    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
+    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputPrefix))
 
     # Log targets which seem to have abnormal copy numbers
     norm_index = np.where(cnv_support == norm_copy_num)[0][0]
@@ -205,7 +205,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
 
     reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
                                                                             'end', 'ploidy']].applymap(int)
-    reporting_df.to_csv('{}_summary.txt'.format(outputFile), sep='\t')
+    reporting_df.to_csv('{}_summary.txt'.format(outputPrefix), sep='\t')
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
@@ -274,15 +274,14 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
         cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
 @command('create-bams')
-def create_bams(targets_file, output_prefix):
-    """
-    Makes simulated data to run the program with, given a target bed file and an output file prefix.
+def create_bams(targetsFile, outputPrefix):
+    """Makes simulated data to run the program with, given a target bed file and an output file prefix.
 
     :param targetsFile: A BED file with targets to simulate coverage for.
     :param outputPrefix: an output file prefix used to name the output bam and fofn file.
     :return:
     """
-    SimulateData.make_simulated_data(output_prefix, targets_file)
+    SimulateData.make_simulated_data(outputPrefix, targetsFile)
 
 
 if __name__ == '__main__':
