@@ -68,8 +68,8 @@ class TargetJointDistribution(object):
         # Note python's "or" is equivalent to || not |, saving the RNG and exp
         if log_test_ratio > 0 or np.random.rand() < np.exp(log_test_ratio):
             return copy_proposed, intensity_proposed, 1.0
-        else:
-            return copies[target_index], intensities[target_index], 0.0
+
+        return copies[target_index], intensities[target_index], 0.0
 
     def log_joint_likelihood(self, intensities, copies, return_neg=False):
         """ Returns unnormalized log likelihood of joint probability given subject data, full set of copy numbers and
@@ -121,10 +121,10 @@ class TargetJointDistribution(object):
 
         if return_matrix_comp:
             return matrix_comp
-        else:
-            mu_1 = mu[index]
-            mu_2 = np.delete(mu, index)
-            a = np.delete(intensities, index)
 
-            mu_bar = mu_1 + np.dot(np.dot(matrix_comp['cov_12'], matrix_comp['cov_22_inv']), (a - mu_2).reshape((-1,1)))
-            return mu_bar.flatten()[0], matrix_comp['cov_bar'].flatten()[0]
+        mu_1 = mu[index]
+        mu_2 = np.delete(mu, index)
+        a = np.delete(intensities, index)
+
+        mu_bar = mu_1 + np.dot(np.dot(matrix_comp['cov_12'], matrix_comp['cov_22_inv']), (a - mu_2).reshape((-1,1)))
+        return mu_bar.flatten()[0], matrix_comp['cov_bar'].flatten()[0]

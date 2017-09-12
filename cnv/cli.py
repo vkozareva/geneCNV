@@ -1,19 +1,23 @@
+import cPickle
+import logging
 import sys
 
-import logging
-import cPickle
 import numpy as np
 import pandas as pd
-from mando import main
 from mando import command
+from mando import main
 
-import utilities as cnv_util
-from coverage_matrix import CoverageMatrix
 from LogisticNormal import hln_EM
-from hln_parameters import HLN_Parameters
-from MCMC.VisualizeMCMC import VisualizeMCMC
 from MCMC.ConvergenceAnalysis import ConvergenceAnalysis
+from MCMC.VisualizeMCMC import VisualizeMCMC
 from cnv import __version__
+from cnv.Targets.TargetCollection import DEFAULT_MERGE_DISTANCE
+from cnv.Targets.TargetCollection import TargetCollection
+from cnv.Targets.Target import Target
+from cnv.utilities import SimulateData
+from coverage_matrix import CoverageMatrix
+from hln_parameters import HLN_Parameters
+
 
 @command('version')
 def version():
@@ -23,14 +27,14 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=None, targets_bed_file=None, unwanted_filters=None, min_dist=629):
-    """ Create coverage_matrix from given bamfiles_fofn.
+def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=None, unwanted_filters=None, min_dist=DEFAULT_MERGE_DISTANCE):
+    """ Create coverage_matrix from given bamfilesFofn.
 
-    :param bamfiles_fofn: File containing the paths to all bedfiles to be included in the coverage_matrix
-    :param outfile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
-    :param target_argfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
+    :param targetsBedfile: Source of targets, and that may include baseline intervals
+    :param bamfilesFofn: File containing the paths to all BAM files to be included in the coverage_matrix
+    :param outputFile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
+    :param targetArgfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
-    :param targets_bed_file: Alternative source of targets, and that may include baseline intervals
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
@@ -41,46 +45,34 @@ def create_matrix(bamfiles_fofn, outfile=None, target_argfile=None, wanted_gene=
 
     """
 
-    if bamfiles_fofn.endswith('.bam'):
-        bamfiles_fofn = bamfiles_fofn.split(',')
-    if wanted_gene and targets_bed_file:
-        logging.error("Both --wanted_gene and --targets_bed_file were specified (only one is allowed).")
-        sys.exit(1)
-    elif wanted_gene:
-        targets = cnv_util.combine_panel_intervals(wanted_gene=wanted_gene, min_dist=min_dist)
-    elif targets_bed_file:
-        targets = []
-        with open(targets_bed_file) as f:
-            for line in f:
-                line = line.rstrip('\r\n')
-                target_data = line.split('\t')
-                # convert start and end coordinates to integers for samtools
-                target_data[1:3] = map(int, target_data[1:3])
-                keys = ['chrom', 'start', 'end', 'label'] + (['extra'] if len(target_data) > 4 else [])
-                targets.append(dict(zip(keys, target_data)))
+    if bamfilesFofn.endswith('.bam'):
+        bamfilesFofn = bamfilesFofn.split(',')
+
+    if targetsBedfile:
+        targets = TargetCollection.load_from_txt_file(targetsBedfile, min_merge_dist=min_dist)
     else:
-        logging.error("One of --wanted_gene or --targets_bed_file must be specified.")
+        logging.error("--targetsBedfile must be specified.")
         sys.exit(1)
 
     if unwanted_filters is not None:
         unwanted_filters = unwanted_filters.split(',')
 
-    if target_argfile:
+    if targetArgfile:
         targets_params = {'full_targets': targets,
                           'unwanted_filters': unwanted_filters,
                           'min_dist': min_dist}
-        with open(target_argfile, 'w') as f:
+        with open(targetArgfile, 'w') as f:
             cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
-    matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters, min_interval_separation=min_dist)
-    coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfiles_fofn, targets)
-    if outfile:
-        coverage_matrix_df.to_csv(outfile)
-        print 'Finished creating {}'.format(outfile)
+    matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters)
+    coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfilesFofn, targets)
+    if outputFile:
+        coverage_matrix_df.to_csv(outputFile)
+        print 'Finished creating {}'.format(outputFile)
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
+def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
                     exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
                     norm_cutoff=0.5):
     """Test for copy number variation in a given sample
@@ -88,7 +80,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
     :param parametersFile: Pickled file containing a dict with CoverageMatrix arguments and
                            instance of HLN_Parameters (mu, covariance, targets)
-    :param outputFile: Output file name without extension -- generates two output files (one .txt file of posteriors
+    :param outputPrefix: Output file name without extension -- generates two output files (one .txt file of posteriors
                        and one .pdf displaying stacked bar chart)
     :param n_iterations: The number of MCMC iterations desired (should be divisible by 100)
     :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period (should be divisible by 0.05)
@@ -111,10 +103,9 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     targets_to_test = targets_params['parameters'].targets
 
     # Parse subject bamfile
-    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters'],
-                                min_interval_separation=targets_params['min_dist']).create_coverage_matrix([subjectBamfilePath], full_targets)
-    subject_id = subject_df['subject'][0]
-    target_columns = [target['label'] for target in targets_to_test]
+    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectBamfilePath], full_targets)
+    subject_id = subject_df['sample'][0]
+    target_columns = [target.label for target in targets_to_test]
     subject_data = subject_df[target_columns].values.astype('float')
 
     # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
@@ -123,14 +114,26 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     # Check if baseline targets exist
     first_baseline_i = len(targets_to_test) # In case there are no baseline targets.
     for i in xrange(len(targets_to_test)):
-        if targets_to_test[i]['label'].startswith('Baseline'):
+        if 'Baseline' in targets_to_test[i].label:
             first_baseline_i = i
-            logging.info('Using {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in targets_to_test[i]
-                                                                                           ['label'] else 'individual'),
+            logging.info('\nUsing {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in
+                                                                                           targets_to_test[i].label else 'individual'),
                                                                                            len(full_targets) - first_baseline_i))
             break
-    # Report target coverage
-    logging.info('Target coverage: {}'.format(np.sum(subject_data[:, :first_baseline_i])))
+    # Report non-baseline target coverage
+    logging.info('Non-baseline target coverage: {}\n'.format(np.sum(subject_data[:, :first_baseline_i])))
+
+    # Check and report test sample and reference set correlation (for non-baseline targets)
+    target_xvals = np.exp(np.concatenate((targets_params['parameters'].mu.flatten(), [0]))[:first_baseline_i])
+    control_intensities = target_xvals / np.sum(target_xvals)
+
+    sample_intensities = subject_data.flatten()[:first_baseline_i] / np.sum(subject_data.flatten()[:first_baseline_i])
+    correlation = np.corrcoef(control_intensities, sample_intensities)[0,1]
+    logging.info('Correlation between sample intensities and '
+                 'average training intensities: {}'.format(round(correlation, 4)))
+    if correlation < 0.9:
+        logging.warning('Low correlation between test and training samples.\n'
+                        'Results likely to be inaccurate if correlation < 0.9.')
 
     # ploidy model (and sampling) actually run within convergence analysis instance
     convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
@@ -150,14 +153,14 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     # Create dataframe for reporting copy number posteriors
     mcmc_df = pd.DataFrame(copy_posteriors, columns=['Copy_{}'.format(cnv) for cnv in cnv_support])
     mcmc_df['target'] = target_columns
-    mcmc_df['chrom'] = [target['chrom'] for target in targets_to_test]
-    mcmc_df['start'] = [target['start'] for target in targets_to_test]
-    mcmc_df['end'] = [target['end'] for target in targets_to_test]
-    mcmc_df.to_csv('{}.txt'.format(outputFile), sep='\t')
+    mcmc_df['chrom'] = [target.chrom for target in targets_to_test]
+    mcmc_df['start'] = [target.start for target in targets_to_test]
+    mcmc_df['end'] = [target.end for target in targets_to_test]
+    mcmc_df.to_csv('{}.txt'.format(outputPrefix), sep='\t')
 
     # Create stacked bar plot and write to pdf
     visualize_instance = VisualizeMCMC(cnv_support, target_columns, copy_posteriors[:first_baseline_i])
-    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputFile))
+    visualize_instance.visualize_copy_numbers('Copy Number Posteriors for Subject {}'.format(subject_id), '{}.pdf'.format(outputPrefix))
 
     # Log targets which seem to have abnormal copy numbers
     norm_index = np.where(cnv_support == norm_copy_num)[0][0]
@@ -175,21 +178,21 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
     ploidy_change_i = np.concatenate(([0], np.where(MAP_ploidy[:-1] != MAP_ploidy[1:])[0] + 1))
     reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'num_targets', 'chrom',
                                          'start', 'end', 'ploidy', 'max_posterior', 'min_posterior',
-                                         'mean_posterior', 'loglikelihood_diff', 'extra_data'])
+                                         'mean_posterior', 'loglikelihood_diff', 'name_data'])
 
     # if no mutations detected
     if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
         posterior_set = copy_posteriors[:first_baseline_i, norm_index]
 
-        extra_ind = [i for i,d in enumerate(targets_to_test) if 'extra' in d]
-        extra = '-'.join({targets_to_test[i]['extra'] for i in extra_ind}) if extra_ind else None
+        name_ind = [i for i,d in enumerate(targets_to_test) if d.name]
+        name = '-'.join({targets_to_test[i].name for i in name_ind}) if name_ind else None
 
         # first_baseline_i also corresponds to length of non-baseline targets in targets_to_test
         data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]),
-                first_baseline_i, targets_to_test[0]['chrom'], targets_to_test[0]['start'],
-                targets_to_test[first_baseline_i - 1]['end'], norm_copy_num,
+                first_baseline_i, targets_to_test[0].chrom, targets_to_test[0].start,
+                targets_to_test[first_baseline_i - 1].end, norm_copy_num,
                 np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set),
-                loglike_diff, extra]
+                loglike_diff, name]
         reporting_df.loc[0] = data
     else:
         # full data for combined mutations
@@ -203,18 +206,19 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputFile, n_iterations
                 cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
                 posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
 
-                extra_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if 'extra' in d]
-                extra = '-'.join({targets_to_test[j]['extra'] for j in extra_ind}) if extra_ind else None
+                # Include target names if existing
+                name_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if d.name]
+                name = '-'.join({targets_to_test[j].name for j in name_ind}) if name_ind else None
 
                 data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, num_targets,
-                        targets_to_test[0]['chrom'], targets_to_test[t_index]['start'], targets_to_test[end_t_index]['end'],
+                        targets_to_test[0].chrom, targets_to_test[t_index].start, targets_to_test[end_t_index].end,
                         round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
-                        np.mean(posterior_set), loglike_diff, extra]
+                        np.mean(posterior_set), loglike_diff, name]
                 reporting_df.loc[i] = data
 
     reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
                                                                             'end', 'ploidy']].applymap(int)
-    reporting_df.to_csv('{}_summary.txt'.format(outputFile), sep='\t')
+    reporting_df.to_csv('{}_summary.txt'.format(outputPrefix), sep='\t')
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
@@ -242,29 +246,19 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     # Read the coverageMatrixFile.
     coverage_df = pd.read_csv(coverageMatrixFile, header=0, index_col=0)
 
-    # Log useful values if included in coverage matrix
-    if 'TSID_ratio' in coverage_df.columns:
-        # convert dates to datetime
-        coverage_df.date_modified = pd.to_datetime(coverage_df.date_modified, unit='s')
-        coverage_df['date'] = coverage_df.date_modified.dt.date
-
-        # Log the list of subjects actually used, with ratios, and perhaps some other stats.
-        logging.info('Subjects trained:\n{}'.format(coverage_df[['subject', 'date', 'TSID_ratio']]))
-
     # Get the appropriate target columns
-    targetCols = [target['label'] for target in targets]
+    targetCols = [target.label for target in targets]
     if use_baseline_sum:
         # assuming all targets listed before baselines -- get index of first one
-        first_baseline_i = targets.index(next(target for target in targets if target['label'].startswith('Baseline')))
+        first_baseline_i = targets.t_index(next(target for target in targets if 'Baseline' in target.label))
         targetCols = targetCols[:first_baseline_i] + ['BaselineSum']
+        # we can slice the TargetCollection
         targets = targets_params['full_targets'][:first_baseline_i]
-        sum_target = {
-            'chrom': '{}-{}'.format(targets_params['full_targets'][first_baseline_i]['chrom'],
-                                    targets_params['full_targets'][-1]['chrom']),
-            'start': None,
-            'end': None,
-            'label': 'BaselineSum'
-        }
+
+        chrom_span = '{}-{}'.format(targets_params['full_targets'][first_baseline_i].chrom,
+                                    targets_params['full_targets'][-1].chrom)
+        sum_target = Target(chrom_span, None, None, 'BaselineSum')
+
         targets.append(sum_target)
     # Run some sanity checks.
     errors = 0
@@ -272,10 +266,10 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
         # Every subject has coverage for every target.
         for targetCol in targetCols:
             if targetCol not in subject:
-                logging.error('Subject {} is missing target {}.'.format(subject['subject'], targetCol))
+                logging.error('Sample {} is missing target {}.'.format(subject['sample'], targetCol))
                 errors += 1
             elif subject[targetCol] == 0:
-                logging.warning('Subject {} has no coverage for target {}.'.format(subject['subject'], targetCol))
+                logging.warning('Sample {} has no coverage for target {}.'.format(subject['sample'], targetCol))
     if errors > 0:
         sys.exit(1)
 
@@ -290,6 +284,17 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     targets_params['parameters'] = HLN_Parameters(targets, mu, covariance)
     with open(outputFile, 'w') as f:
         cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
+
+@command('create-bams')
+def create_bams(targetsFile, outputPrefix):
+    """Makes simulated data to run the program with, given a target bed file and an output file prefix.
+
+    :param targetsFile: A BED file with targets to simulate coverage for.
+    :param outputPrefix: an output file prefix used to name the output bam and fofn file.
+    :return:
+    """
+    SimulateData.make_simulated_data(outputPrefix, targetsFile)
+
 
 if __name__ == '__main__':
     main()
