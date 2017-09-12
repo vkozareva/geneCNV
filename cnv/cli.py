@@ -116,12 +116,24 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
     for i in xrange(len(targets_to_test)):
         if 'Baseline' in targets_to_test[i].label:
             first_baseline_i = i
-            logging.info('Using {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in
+            logging.info('\nUsing {} {} baseline targets to normalize ploidy number'.format(('sum of' if 'Sum' in
                                                                                            targets_to_test[i].label else 'individual'),
                                                                                            len(full_targets) - first_baseline_i))
             break
-    # Report target coverage
-    logging.info('Target coverage: {}'.format(np.sum(subject_data[:, :first_baseline_i])))
+    # Report non-baseline target coverage
+    logging.info('Non-baseline target coverage: {}\n'.format(np.sum(subject_data[:, :first_baseline_i])))
+
+    # Check and report test sample and reference set correlation (for non-baseline targets)
+    target_xvals = np.exp(np.concatenate((targets_params['parameters'].mu.flatten(), [0]))[:first_baseline_i])
+    control_intensities = target_xvals / np.sum(target_xvals)
+
+    sample_intensities = subject_data.flatten()[:first_baseline_i] / np.sum(subject_data.flatten()[:first_baseline_i])
+    correlation = np.corrcoef(control_intensities, sample_intensities)[0,1]
+    logging.info('Correlation between sample intensities and '
+                 'average training intensities: {}'.format(round(correlation, 4)))
+    if correlation < 0.9:
+        logging.warning('Low correlation between test and training samples.\n'
+                        'Results likely to be inaccurate if correlation < 0.9.')
 
     # ploidy model (and sampling) actually run within convergence analysis instance
     convergence_analysis = ConvergenceAnalysis(cnv_support, targets_params['parameters'], subject_data, first_baseline_i,
@@ -166,21 +178,21 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
     ploidy_change_i = np.concatenate(([0], np.where(MAP_ploidy[:-1] != MAP_ploidy[1:])[0] + 1))
     reporting_df = pd.DataFrame(columns=['subject', 'mutation', 'targets', 'num_targets', 'chrom',
                                          'start', 'end', 'ploidy', 'max_posterior', 'min_posterior',
-                                         'mean_posterior', 'loglikelihood_diff', 'extra_data'])
+                                         'mean_posterior', 'loglikelihood_diff', 'name_data'])
 
     # if no mutations detected
     if np.all(ploidy_change_i == 0) and MAP_ploidy[0] == norm_copy_num:
         posterior_set = copy_posteriors[:first_baseline_i, norm_index]
 
-        extra_ind = [i for i,d in enumerate(targets_to_test) if d.name]
-        extra = '-'.join({targets_to_test[i].name for i in extra_ind}) if extra_ind else None
+        name_ind = [i for i,d in enumerate(targets_to_test) if d.name]
+        name = '-'.join({targets_to_test[i].name for i in name_ind}) if name_ind else None
 
         # first_baseline_i also corresponds to length of non-baseline targets in targets_to_test
         data = [subject_id, 'NORM', '{}-{}'.format(target_columns[0], target_columns[first_baseline_i - 1]),
                 first_baseline_i, targets_to_test[0].chrom, targets_to_test[0].start,
                 targets_to_test[first_baseline_i - 1].end, norm_copy_num,
                 np.amax(posterior_set), np.amin(posterior_set), np.mean(posterior_set),
-                loglike_diff, extra]
+                loglike_diff, name]
         reporting_df.loc[0] = data
     else:
         # full data for combined mutations
@@ -194,14 +206,14 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
                 cnv_index = np.where(cnv_support == MAP_ploidy[t_index])[0][0]
                 posterior_set = copy_posteriors[t_index:(end_t_index+1), cnv_index]
 
-                # TODO: No Target object has an extra attribute, so not sure what this is about...
-                extra_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if d.name]
-                extra = '-'.join({targets_to_test[j].name for j in extra_ind}) if extra_ind else None
+                # Include target names if existing
+                name_ind = [j for j,d in enumerate(targets_to_test[t_index:(end_t_index + 1)]) if d.name]
+                name = '-'.join({targets_to_test[j].name for j in name_ind}) if name_ind else None
 
                 data = [subject_id, ('DEL' if MAP_ploidy[t_index] < norm_copy_num else 'DUP'), target_set, num_targets,
                         targets_to_test[0].chrom, targets_to_test[t_index].start, targets_to_test[end_t_index].end,
                         round(MAP_ploidy[t_index]), np.amax(posterior_set), np.amin(posterior_set),
-                        np.mean(posterior_set), loglike_diff, extra]
+                        np.mean(posterior_set), loglike_diff, name]
                 reporting_df.loc[i] = data
 
     reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
