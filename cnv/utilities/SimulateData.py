@@ -30,7 +30,7 @@ def _make_fofn_name(output_prefix):
 
 
 def _make_bam_names(output_prefix, numBams = 10):
-    return [output_prefix + "_bam_" + str(x) +'.bam' for x in range(1, (numBams + 1))]
+    return ["{}_bam_{}.bam".format(output_prefix, x) for x in range(1, (numBams + 1))]
 
 def _write_fake_bam_file(bam_name, header, targets, intensities):
     # Get a dictionary to convert sequence name to index
