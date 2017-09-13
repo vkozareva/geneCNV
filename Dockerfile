@@ -1,14 +1,14 @@
-# Install dmd on top of genepeeks-science.
+# Install geneCNV on top of genepeeks-science.
 FROM genepeeks-science
 
 # Required by pysam.
 USER root
 RUN apt-get -y install liblzma-dev
 
-COPY . dmd/
-RUN chown -R genepeeks.genepeeks dmd
+COPY . geneCNV/
+RUN chown -R genepeeks.genepeeks geneCNV
 USER genepeeks
-WORKDIR dmd
+WORKDIR geneCNV
 # Host's pyenv version isn't present; remove it.
 RUN rm -f .python-version
 
@@ -17,7 +17,7 @@ RUN pip install nose
 RUN ./runtests.sh
 
 WORKDIR ..
-RUN rm -rf dmd
+RUN rm -rf geneCNV
 
 # Copy model training data including coverage matrix and hyperparameters.
 # For now just assume they were previously built in the training directory.
