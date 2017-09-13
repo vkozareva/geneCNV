@@ -29,3 +29,4 @@ packaging
 pandas
 pybedtools
 pysam
+scipy
