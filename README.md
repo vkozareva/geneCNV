@@ -1,5 +1,5 @@
-# dmd [![CircleCI](https://circleci.com/gh/GenePeeks/dmd.svg?style=svg&circle-token=41203ba7ace9a56592f8070d62b65d0a45fa334c)](https://circleci.com/gh/GenePeeks/dmd)
-##The Copy Number Variation Package
+# dmd [![CircleCI](https://circleci.com/gh/GenePeeks/geneCNV.svg?style=svg&circle-token=41203ba7ace9a56592f8070d62b65d0a45fa334c)](https://circleci.com/gh/GenePeeks/geneCNV)
+## The Copy Number Variation Package
 
 A repository dedicated to the analysis of the exons that affect Duchennne and Becker muscular dystrophy.
 
@@ -12,8 +12,8 @@ This repository is divided into several main sections.
 ## Installation
 
 ~~~bash
-git clone https://github.com/GenePeeks/dmd.git
-cd cnv
+git clone https://github.com/GenePeeks/geneCNV.git
+cd geneCNV
 python setup.py install
 ~~~
 
