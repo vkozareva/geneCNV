@@ -46,9 +46,11 @@ class ReadGroups(object):
             setattr(self, attr, default)
         elif len(tag_vals) == 1:
             setattr(self, attr, tag_vals.pop())
+        elif tag == 'SM':
+            raise IOError("File {} had two or more SM tags.  The CNV package expects only one sample per BAM.".format(bam_file_name))
         else:
-            raise IOError("File {} had two or more {} tags.  The CNV package expects only one library-prep/sample/flow-cell per BAM.".format(bam_file_name, tag))
-
+            logging.warning("File {} had two or more {} tags. Recording all library-preps/flow-cells.".format(bam_file_name, tag))
+            setattr(self, attr, '|'.join(tag_vals))
 
 class WrappedBAM(object):
     """ A read-only BAM file with some special methods to get header information useful when creating
