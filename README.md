@@ -19,7 +19,7 @@ python setup.py install
 ## Command Line Interface
 
 ~~~bash
-cnv evaluate-samples -h
+genecnv evaluate-samples -h
 ~~~
 
 ## Running Tests

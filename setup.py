@@ -11,7 +11,7 @@ requirements_file = os.path.join(os.path.dirname(__file__), "requirements.txt")
 with open(requirements_file) as f:
     all_reqs = f.read().splitlines()
 required = [x for x in all_reqs if not x.startswith("git+")]
-setup(name='cnv',
+setup(name='genecnv',
       version=VERSION,
       url='https://github.com/genepeeks/geneCNV',
       description='Library and command line scripts to find copy number variation.',
@@ -21,6 +21,6 @@ setup(name='cnv',
       package_data={'': ['inputs/*.txt', 'inputs/*.bed']},
       dependency_links=[],
       entry_points={
-          'console_scripts': ['cnv=cnv.cli:main']
+          'console_scripts': ['genecnv=cnv.cli:main']
       },
       zip_safe=False)
