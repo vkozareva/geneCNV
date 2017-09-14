@@ -1,42 +1,40 @@
-# Install dmd on top of genepeeks-science.
-FROM genepeeks-science
+# Source Image
+FROM ubuntu:16.04
 
-# Required by pysam.
-USER root
-RUN apt-get -y install liblzma-dev
+# Set noninterative mode
+ENV DEBIAN_FRONTEND noninteractive
 
-COPY . dmd/
-RUN chown -R genepeeks.genepeeks dmd
-USER genepeeks
-WORKDIR dmd
-# Host's pyenv version isn't present; remove it.
-RUN rm -f .python-version
+# apt update and install global requirements
+RUN apt-get clean all && \
+    apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y  \
+        build-essential \
+        libbz2-dev \
+        libcurl4-openssl-dev \
+        liblzma-dev \
+        libssl-dev \
+        python \
+        python-matplotlib \
+        python-nose \
+        python-numpy \
+        python-pandas \
+        python-pip \
+        python-scipy \
+        zlib1g-dev
 
-RUN python setup.py install
-RUN pip install nose
-RUN ./runtests.sh
+# apt clean and remove cached source lists
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-WORKDIR ..
-RUN rm -rf dmd
+# Install geneCNV
+COPY . /geneCNV
+RUN cd /geneCNV && \
+    python setup.py install
 
-# Copy model training data including coverage matrix and hyperparameters.
-# For now just assume they were previously built in the training directory.
-COPY training/training_bam.fofn \
-     training/training_coverage_matrix_wanted.csv \
-     training/training_targets_wanted.pickle \
-     training/training_wanted_parameters.pickle \
-     training/DMD_targets.bed \
-     training/DMD_coverage_matrix.csv \
-     training/DMD_targets.pickle \
-     training/DMD_parameters.pickle \
-     training/DMD_with_baseline_targets.bed \
-     training/DMD_with_baseline_coverage_matrix.csv \
-     training/DMD_with_baseline_targets.pickle \
-     training/DMD_with_baseline_parameters.pickle \
-     training/
-USER root
-RUN chown -R genepeeks.genepeeks training
-USER genepeeks
-WORKDIR training
 
-ENTRYPOINT ["/home/genepeeks/.pyenv/shims/cnv", "evaluate-sample"]
+# Define default command
+CMD ["cnv"]
+
+# File Author / Maintainer
+MAINTAINER Carlos Borroto <carlos@genepeeks.com>
