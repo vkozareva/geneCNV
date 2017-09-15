@@ -17,7 +17,6 @@ setup(name='genecnv',
       description='Library and command line scripts to find copy number variation.',
       packages=find_packages(),
       install_requires=required,
-      include_package_data=True,
       package_data={'': ['inputs/*.txt', 'inputs/*.bed']},
       dependency_links=[],
       entry_points={

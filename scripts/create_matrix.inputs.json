@@ -1,0 +1,6 @@
+{
+  "CreateMatrixWf.samples_file": "gs://genepeeks-bioinformatics/home/velina/1000.genomes.exome.00.csv",
+  "CreateMatrixWf.baseline_intervals": "gs://genepeeks-bioinformatics/home/velina/dmd_full_baseline.bed",
+  "CreateMatrixWf.preemptible_tries": 3,
+  "CreateMatrixWf.disk_size": 50
+}

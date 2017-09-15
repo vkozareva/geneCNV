@@ -1,42 +1,58 @@
-# Install geneCNV on top of genepeeks-science.
-FROM genepeeks-science
+# Source Image
+FROM ubuntu:16.04
 
-# Required by pysam.
-USER root
-RUN apt-get -y install liblzma-dev
+# Set noninterative mode
+ENV DEBIAN_FRONTEND noninteractive
 
-COPY . geneCNV/
-RUN chown -R genepeeks.genepeeks geneCNV
-USER genepeeks
-WORKDIR geneCNV
-# Host's pyenv version isn't present; remove it.
-RUN rm -f .python-version
+# apt update and install global requirements
+RUN apt-get clean all && \
+    apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y  \
+        build-essential \
+        gfortran \
+        libatlas-dev \
+        libbz2-dev \
+        libcurl4-openssl-dev \
+        liblapack-dev \
+        liblzma-dev \
+        libopenblas-dev \
+        libssl-dev \
+        python \
+        python-dev \
+        python-pip \
+        zlib1g-dev
 
-RUN python setup.py install
-RUN pip install nose
-RUN ./runtests.sh
+# Update pip and setuptools
+RUN pip install -U pip
+RUN pip install -U setuptools
 
-WORKDIR ..
-RUN rm -rf geneCNV
+# Install requirements that are failing to install with setup.py
+RUN pip install numpy==1.11.1
 
-# Copy model training data including coverage matrix and hyperparameters.
-# For now just assume they were previously built in the training directory.
-COPY training/training_bam.fofn \
-     training/training_coverage_matrix_wanted.csv \
-     training/training_targets_wanted.pickle \
-     training/training_wanted_parameters.pickle \
-     training/DMD_targets.bed \
-     training/DMD_coverage_matrix.csv \
-     training/DMD_targets.pickle \
-     training/DMD_parameters.pickle \
-     training/DMD_with_baseline_targets.bed \
-     training/DMD_with_baseline_coverage_matrix.csv \
-     training/DMD_with_baseline_targets.pickle \
-     training/DMD_with_baseline_parameters.pickle \
-     training/
-USER root
-RUN chown -R genepeeks.genepeeks training
-USER genepeeks
-WORKDIR training
+# Install requirements that are failing to install with pip and setup.py
+RUN apt-get install -y  \
+        python-matplotlib
 
-ENTRYPOINT ["/home/genepeeks/.pyenv/shims/cnv", "evaluate-sample"]
+# apt clean and remove cached source lists
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set scipy building environment variables ATLAS, BLAS and LAPACK
+ENV ATLAS=/usr/lib/libatlas.so.3
+ENV BLAS=/usr/lib/libblas.so.3
+ENV LAPACK=/usr/lib/liblapack.so.3
+
+# Set libblas to use openblas alternative, recommended
+RUN update-alternatives --set libblas.so.3 /usr/lib/openblas-base/libblas.so.3
+
+# Install geneCNV
+COPY . /geneCNV
+RUN cd /geneCNV && \
+    python setup.py install
+
+# Define default command
+CMD ["cnv"]
+
+# File Author / Maintainer
+MAINTAINER Carlos Borroto <carlos@genepeeks.com>
