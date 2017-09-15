@@ -52,7 +52,7 @@ RUN cd /geneCNV && \
     python setup.py install
 
 # Define default command
-CMD ["cnv"]
+CMD ["genecnv"]
 
 # File Author / Maintainer
 MAINTAINER Carlos Borroto <carlos@genepeeks.com>

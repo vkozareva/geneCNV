@@ -1,7 +1,6 @@
-# dmd [![CircleCI](https://circleci.com/gh/GenePeeks/geneCNV.svg?style=svg&circle-token=41203ba7ace9a56592f8070d62b65d0a45fa334c)](https://circleci.com/gh/GenePeeks/geneCNV)
-## The Copy Number Variation Package
+# geneCNV [![CircleCI](https://circleci.com/gh/GenePeeks/geneCNV.svg?style=svg&circle-token=41203ba7ace9a56592f8070d62b65d0a45fa334c)](https://circleci.com/gh/GenePeeks/geneCNV)
 
-A repository dedicated to the analysis of the exons that affect Duchennne and Becker muscular dystrophy.
+A command-line program for detection of copy number variants using targeted sequencing data.
 
 This repository is divided into several main sections.
 
@@ -20,7 +19,7 @@ python setup.py install
 ## Command Line Interface
 
 ~~~bash
-cnv evaluate-samples -h
+genecnv evaluate-samples -h
 ~~~
 
 ## Running Tests

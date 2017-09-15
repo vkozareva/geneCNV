@@ -17,7 +17,7 @@ test:
     - pylint cnv
     - nosetests cnv
     - mkdir tmp
-    - cnv create-bams notebooks/DMD_targets.bed tmp/
-    - cnv create-matrix notebooks/DMD_targets.bed tmp/files.fofn --outputFile tmp/matrix.csv --targetArgfile tmp/targs.p
-    - cnv train-model --tol 0.001 tmp/targs.p tmp/matrix.csv tmp/train.out
-    - cnv evaluate-sample --no_gelman_rubin --n_iterations 200 --use_single_process tmp/_bam_1.bam tmp/train.out tmp/results
+    - genecnv create-bams notebooks/DMD_targets.bed tmp/
+    - genecnv create-matrix notebooks/DMD_targets.bed tmp/files.fofn --outputFile tmp/matrix.csv --targetArgfile tmp/targs.p
+    - genecnv train-model --tol 0.001 tmp/targs.p tmp/matrix.csv tmp/train.out
+    - genecnv evaluate-sample --no_gelman_rubin --n_iterations 200 --use_single_process tmp/_bam_1.bam tmp/train.out tmp/results
