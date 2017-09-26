@@ -55,7 +55,7 @@ def _write_fake_bam_file(bam_name, header, targets, intensities):
             s = t.start
             e = t.end
             length = min(e - s, 10)
-            numreads = poisson(totalCoverage * intensities)[0]
+            numreads = poisson(totalCoverage * intensity)
             rid = name_to_index[t.chrom]
             a.query_sequence = "A" * length
             a.template_length = -length
