@@ -23,7 +23,7 @@ class VisualizeMCMC(object):
 
         # loop through and add bar to stack for each copy number in support
         for i in range(len(self.cnv_support)):
-            args = {'label': '{} Copy'.format(self.cnv_support[i]),
+            args = {'label': '{} Copy'.format(int(self.cnv_support[i])),
                     'alpha': 0.9,
                     'color': self.colors[i],
                     'width': bar_width,
