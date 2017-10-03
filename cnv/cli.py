@@ -59,8 +59,8 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
 
     if targetArgfile:
         targets_params = {'full_targets': targets,
-                          'unwanted_filters': unwanted_filters,
-                          'min_dist': min_dist}
+                          'unwanted_filters': unwanted_filters
+                         }
         with open(targetArgfile, 'w') as f:
             cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
@@ -107,7 +107,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
     subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectBamfilePath], full_targets)
     subject_id = subject_df['sample'][0]
     target_columns = [target.label for target in targets_to_test]
-    subject_data = subject_df[target_columns].values.astype('float')
+    subject_data = subject_df[target_columns].values.astype('float').flatten()
 
     # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
     cnv_support = np.array([1e-10, 1, 2, 3]).astype(float)
@@ -122,13 +122,27 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
                                                                                            len(full_targets) - first_baseline_i))
             break
     # Report non-baseline target coverage
-    logging.info('Non-baseline target coverage: {}\n'.format(np.sum(subject_data[:, :first_baseline_i])))
+    logging.info('Non-baseline target coverage: {}\n'.format(np.sum(subject_data[:first_baseline_i])))
 
-    # Check and report test sample and reference set correlation (for non-baseline targets)
-    target_xvals = np.exp(np.concatenate((targets_params['parameters'].mu.flatten(), [0]))[:first_baseline_i])
+    # Check and report target-baseline-sum z-score if appropriate
+    control_tb_mean = targets_params.get('target_base_mean', None)
+    if control_tb_mean:
+        control_tb_sd = targets_params.get('target_base_sd', None)
+        sample_tb_ratio = np.sum(subject_data[:first_baseline_i]) / subject_data[first_baseline_i]
+        sample_zscore = (sample_tb_ratio - control_tb_mean) / control_tb_sd
+
+        logging.info('Z-score of sample target-to-baseline-sum ratio is {}.\n'
+                     'Results likely to be less accurate if |z-score| > 1.5.'.format(sample_zscore))
+        # set appropriate slice index for correlation check below
+        baseline_sum_i = first_baseline_i
+    else:
+        baseline_sum_i = len(targets_to_test)
+
+    # Check and report test sample and reference set correlation (for non-baseline-sum targets)
+    target_xvals = np.exp(np.concatenate((targets_params['parameters'].mu.flatten(), [0]))[:baseline_sum_i])
     control_intensities = target_xvals / np.sum(target_xvals)
 
-    sample_intensities = subject_data.flatten()[:first_baseline_i] / np.sum(subject_data.flatten()[:first_baseline_i])
+    sample_intensities = subject_data[:baseline_sum_i] / np.sum(subject_data[:baseline_sum_i])
     correlation = np.corrcoef(control_intensities, sample_intensities)[0,1]
     logging.info('Correlation between sample intensities and '
                  'average training intensities: {}'.format(round(correlation, 4)))
@@ -260,8 +274,18 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
         chrom_span = '{}-{}'.format(targets_params['full_targets'][first_baseline_i].chrom,
                                     targets_params['full_targets'][-1].chrom)
         sum_target = Target(chrom_span, None, None, 'BaselineSum')
-
         targets.append(sum_target)
+
+        # Include info about distribution of target:baseline_sum coverage across samples
+        target_sums = np.sum(coverage_df[targetCols[:first_baseline_i]].values.astype(float), axis=1)
+        target_base_ratios = target_sums.flatten() / coverage_df['BaselineSum'].values.flatten()
+        target_base_mean = np.mean(target_base_ratios)
+        target_base_sd = np.std(target_base_ratios)
+        logging.info('Coefficient of variation of '
+                     'target-to-baseline-sum ratio: {}'.format(target_base_sd / target_base_mean))
+        targets_params['target_base_mean'] = target_base_mean
+        targets_params['target_base_sd'] = target_base_sd
+
     # Run some sanity checks.
     errors = 0
     for index, subject in coverage_df.iterrows():
@@ -277,13 +301,14 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
 
     # Compute the logistic normal hyperparameters.
     # Omit the non-target columns.
-    mu, covariance = hln_EM(np.array(coverage_df[targetCols].values).astype(float), max_iterations=max_iterations,
+    mu, covariance = hln_EM(coverage_df[targetCols].values.astype(float), max_iterations=max_iterations,
                             tol=tol, fit_diag_only=fit_diag_only)
 
     # Pickle the intervals, hyperparameters and CoverageMatrix arguments into the outputFile.
     logging.info('Trained for {} total targets'.format(len(targets)))
     logging.info('Writing intervals plus hyperparameters to file {}.'.format(outputFile))
     targets_params['parameters'] = HLN_Parameters(targets, mu, covariance)
+
     with open(outputFile, 'w') as f:
         cPickle.dump(targets_params, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
