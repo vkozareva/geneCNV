@@ -1,23 +1,100 @@
-machine:
-  python:
-    version: 2.7.11
+version: 2
+jobs:
+  build:
+    docker:
+      - image: python:2.7.13
 
-dependencies:
-  pre:
-    - pip install -r requirements.txt
-    - pip install nose
-    - pip install pylint
+    working_directory: ~/geneCNV
 
-compile:
-  override:
-    - python setup.py install
+    steps:
+      - checkout
+      - setup_remote_docker   # For Building/pushing images and running containers.
 
-test:
-  override:
-    - pylint cnv
-    - nosetests cnv
-    - mkdir tmp
-    - genecnv create-bams notebooks/DMD_targets.bed tmp/
-    - genecnv create-matrix notebooks/DMD_targets.bed tmp/files.fofn --outputFile tmp/matrix.csv --targetArgfile tmp/targs.p
-    - genecnv train-model --tol 0.001 tmp/targs.p tmp/matrix.csv tmp/train.out
-    - genecnv evaluate-sample --no_gelman_rubin --n_iterations 200 --use_single_process tmp/_bam_1.bam tmp/train.out tmp/results
+      # Documentation recommends using a primary image that already has Docker,
+      # or installing it during a build like we do here.
+      # Since I couldn't easily find an image with both Docker and Python, I'm using the second method.
+      - run:
+          name: Install Docker client
+          command: |
+            set -x
+            VER="17.09.0-ce"
+            curl -L -o /tmp/docker-$VER.tgz https://download.docker.com/linux/static/stable/x86_64/docker-$VER.tgz
+            tar -xz -C /tmp -f /tmp/docker-$VER.tgz
+            mv /tmp/docker/* /usr/bin
+
+      - run:
+          name: Install Google Cloud SDK
+          command: |
+            curl https://sdk.cloud.google.com > gcloud-installer.sh
+            chmod +x gcloud-installer.sh
+            ./gcloud-installer.sh --disable-prompts
+
+      - run:
+          name: Install requirements, pylint, nosetests
+          command: |
+            pip install -r requirements.txt
+            pip install pylint
+            pip install nose
+            pip install coverage coveralls
+
+      - run:
+          name: Check for pylint errors
+          command: |
+            pylint cnv
+
+      - run:
+          name: Build Docker image
+          command: |
+            # Tag with build number on branches that aren't master or develop.
+            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]]; then
+              image_tag=`python -m cnv.cli version | sed "s/cnv v//"`
+            else
+              image_tag="0.1.${CIRCLE_BUILD_NUM}"
+            fi
+            docker build -t "genecnv:${image_tag}" .
+
+      - run:
+          name: Test Docker image and unit tests
+          command: |
+            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]]; then
+              image_tag=`python -m cnv.cli version | sed "s/cnv v//"`
+            else
+              image_tag="0.1.${CIRCLE_BUILD_NUM}"
+            fi
+
+            nosetests --with-coverage -v cnv
+            coveralls | :
+
+            mkdir tmp
+            # Create a data volume for remote docker environment.
+            docker create -v /data --name data alpine:3.4 /bin/true
+            docker cp tmp data:/data/.
+            docker cp notebooks data:/data/.
+            docker run --volumes-from data "genecnv:${image_tag}" genecnv create-bams /data/notebooks/DMD_targets.bed /data/tmp/
+            docker run --volumes-from data "genecnv:${image_tag}" genecnv create-matrix /data/notebooks/DMD_targets.bed /data/tmp/files.fofn --outputFile /data/tmp/matrix.csv --targetArgfile /data/tmp/targs.p
+            docker run --volumes-from data "genecnv:${image_tag}" genecnv train-model --tol 0.001 /data/tmp/targs.p /data/tmp/matrix.csv /data/tmp/train.out
+            docker run --volumes-from data "genecnv:${image_tag}" genecnv evaluate-sample --no_gelman_rubin --n_iterations 200 --use_single_process /data/tmp/_bam_1.bam /data/tmp/train.out /data/tmp/results
+
+      - deploy:
+          name: Push Docker image
+          command: |
+            # For master, push every commit with a tag for that version, and tag latest.
+            # For develop, push with tag version.
+            # TODO: Revert to just the first clause after testing.
+            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]]; then
+              image_tag=`python -m cnv.cli version | sed "s/cnv v//"`
+            else
+              image_tag="0.1.${CIRCLE_BUILD_NUM}"
+            fi
+            echo $GCLOUD_CIRCLE_CI_SERVICE_KEY > ${HOME}/gcloud-circle-ci-service-key.json
+            ${HOME}/google-cloud-sdk/bin/gcloud --quiet components update
+            ${HOME}/google-cloud-sdk/bin/gcloud auth activate-service-account --key-file ${HOME}/gcloud-circle-ci-service-key.json
+            # TODO: Remove '|| true' after testing.
+            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]] || true; then
+              docker tag "genecnv:${image_tag}" "us.gcr.io/genepeeks-bioinformatics/genecnv:${image_tag}"
+              ${HOME}/google-cloud-sdk/bin/gcloud docker -- push "us.gcr.io/genepeeks-bioinformatics/genecnv:${image_tag}"
+            fi
+            if [[ "${CIRCLE_BRANCH}" == "master" ]]; then
+              docker tag "genecnv:${image_tag}" us.gcr.io/genepeeks-bioinformatics/genecnv:latest
+              ${HOME}/google-cloud-sdk/bin/gcloud docker -- push us.gcr.io/genepeeks-bioinformatics/genecnv:latest
+            fi
