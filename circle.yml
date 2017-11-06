@@ -80,17 +80,11 @@ jobs:
           command: |
             # For master, push every commit with a tag for that version, and tag latest.
             # For develop, push with tag version.
-            # TODO: Revert to just the first clause after testing.
-            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]]; then
-              image_tag=`python -m cnv.cli version | sed "s/cnv v//"`
-            else
-              image_tag="0.1.${CIRCLE_BUILD_NUM}"
-            fi
+            image_tag=`python -m cnv.cli version | sed "s/cnv v//"`
             echo $GCLOUD_CIRCLE_CI_SERVICE_KEY > ${HOME}/gcloud-circle-ci-service-key.json
             ${HOME}/google-cloud-sdk/bin/gcloud --quiet components update
             ${HOME}/google-cloud-sdk/bin/gcloud auth activate-service-account --key-file ${HOME}/gcloud-circle-ci-service-key.json
-            # TODO: Remove '|| true' after testing.
-            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]] || true; then
+            if [[ "${CIRCLE_BRANCH}" == "master" || "${CIRCLE_BRANCH}" == "develop" ]]; then
               docker tag "genecnv:${image_tag}" "us.gcr.io/genepeeks-bioinformatics/genecnv:${image_tag}"
               ${HOME}/google-cloud-sdk/bin/gcloud docker -- push "us.gcr.io/genepeeks-bioinformatics/genecnv:${image_tag}"
             fi
