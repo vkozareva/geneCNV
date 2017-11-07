@@ -9,17 +9,7 @@ RUN apt-get clean all && \
     apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y  \
-        build-essential \
-        gfortran \
-        libatlas-dev \
-        libbz2-dev \
-        libcurl4-openssl-dev \
-        liblapack-dev \
-        liblzma-dev \
-        libopenblas-dev \
-        libssl-dev \
         python \
-        python-dev \
         python-pip \
         zlib1g-dev
 
@@ -35,17 +25,9 @@ RUN pip install -U pip setuptools
 COPY . geneCNV/
 WORKDIR geneCNV
 RUN pip install -U -r requirements.txt
-
-# Set scipy building environment variables ATLAS, BLAS and LAPACK
-ENV ATLAS=/usr/lib/libatlas.so.3
-ENV BLAS=/usr/lib/libblas.so.3
-ENV LAPACK=/usr/lib/liblapack.so.3
-
-# Set libblas to use openblas alternative, recommended
-RUN update-alternatives --set libblas.so.3 /usr/lib/openblas-base/libblas.so.3
-
-# Install geneCNV
 RUN python setup.py install
+WORKDIR ..
+RUN rm -rf geneCNV
 
 # Define default command
 CMD ["genecnv"]
