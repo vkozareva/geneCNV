@@ -23,20 +23,18 @@ RUN apt-get clean all && \
         python-pip \
         zlib1g-dev
 
-# Update pip and setuptools
-RUN pip install -U pip
-RUN pip install -U setuptools
-
-# Install requirements that are failing to install with setup.py
-RUN pip install numpy==1.11.1
-
-# Install requirements that are failing to install with pip and setup.py
-RUN apt-get install -y  \
-        python-matplotlib
-
 # apt clean and remove cached source lists
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Update pip and setuptools
+RUN pip install -U pip setuptools
+
+# Pre-install requirements.
+# Not sure why but this avoids lengthy compilation.
+COPY . geneCNV/
+WORKDIR geneCNV
+RUN pip install -U -r requirements.txt
 
 # Set scipy building environment variables ATLAS, BLAS and LAPACK
 ENV ATLAS=/usr/lib/libatlas.so.3
@@ -47,9 +45,7 @@ ENV LAPACK=/usr/lib/liblapack.so.3
 RUN update-alternatives --set libblas.so.3 /usr/lib/openblas-base/libblas.so.3
 
 # Install geneCNV
-COPY . /geneCNV
-RUN cd /geneCNV && \
-    python setup.py install
+RUN python setup.py install
 
 # Define default command
 CMD ["genecnv"]
