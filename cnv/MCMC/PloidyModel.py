@@ -115,13 +115,13 @@ class PloidyModel(object):
         args_norm = (normal_ploidy, True)
 
         # optimize joint log likelihood for intensities given copy numbers and data
-        optarg_map = scipy.optimize.minimize(self.joint_target.log_joint_likelihood, np.concatenate((self.mu.flatten(), [0.])),
+        optarg_map = scipy.optimize.minimize(self.joint_target.log_joint_likelihood, self.mu.flatten(),
                                              args=args_map, tol=1e-6)
-        optarg_norm = scipy.optimize.minimize(self.joint_target.log_joint_likelihood, np.concatenate((self.mu.flatten(), [0.])),
+        optarg_norm = scipy.optimize.minimize(self.joint_target.log_joint_likelihood, self.mu.flatten(),
                                               args=args_norm, tol=1e-6)
 
-        log_like_diff = (self.joint_target.log_joint_likelihood(optarg_map.x, MAP_ploidy) -
-                         self.joint_target.log_joint_likelihood(optarg_norm.x, normal_ploidy))
+        log_like_diff = (self.joint_target.log_joint_likelihood(np.concatenate((optarg_map.x, [0])), MAP_ploidy) -
+                         self.joint_target.log_joint_likelihood(np.concatenate((optarg_norm.x, [0])), normal_ploidy))
         return log_like_diff
 
     def DetectModeJump(self, window_length=201, polyorder=5, initial_offset=500):

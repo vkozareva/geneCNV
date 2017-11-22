@@ -106,6 +106,8 @@ class ConvergenceAnalysis(object):
                     # set up multiprocessing
                     pool = multiprocessing.Pool()
                     run_params = pool.map(run_mcmc_wrapper, run_params)
+                    pool.close()
+                    pool.join()
 
                 # get appropriate data from returned run_params
                 for c_i in range(num_chains):
@@ -207,7 +209,8 @@ class ConvergenceAnalysis(object):
         while loglike_diff < thresh_loglike_diff:
             logging.info('Run {}; trying {} iterations; latest loglike_diff: {}'.format(tries, self.n_iterations, loglike_diff))
             if tries > max_tries:
-                logging.error('Metastability error: unable to reach convergence at most likely mode')
+                raise RuntimeError('Metastability error: unable to converge at copy number state with '
+                                   'greater likelihood than normal ploidy state')
             # check if metastability error in this chain after increasing n_iterations
             if tries > 0:
                 self.ploidy_model.initStates()

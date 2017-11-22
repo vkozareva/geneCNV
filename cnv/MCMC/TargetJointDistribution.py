@@ -74,6 +74,11 @@ class TargetJointDistribution(object):
     def log_joint_likelihood(self, intensities, copies, return_neg=False):
         """ Returns unnormalized log likelihood of joint probability given subject data, full set of copy numbers and
             full set of intensities."""
+
+        # pad intensities with 0 if length is k-1
+        if len(intensities) == len(copies) - 1:
+            intensities = np.concatenate((intensities, [0]))
+
         log_joint = (np.sum(self.data) * -1 * np.log(np.sum(np.multiply(copies, np.exp(intensities)))) +
                      np.sum(np.multiply(self.data, (np.log(copies) + intensities))) +
                      (-0.5 * np.dot(np.dot((intensities - self.mu_full).reshape((1,-1)), self.inv_covariance_full),

@@ -74,7 +74,7 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
 @command('evaluate-sample')
 def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
                     exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
-                    norm_cutoff=0.5):
+                    threshold_loglike_diff=-30, norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
     :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
@@ -92,6 +92,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
                        specified
     :param use_single_process: Will not use multiprocessing during G-R analysis
     :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
+    :param threshold_loglike_diff: Threshold for calling metastability error in log-likelihood comparison with normal ploidy state
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
 
     """
@@ -143,7 +144,8 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
 
     # Check whether result is far from optimal mode (assuming normal ploidy) and repeat to avoid metastability error
     # note that this will only catch metastabality errors that lead to false positives, not false negatives
-    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(autocor_slice,
+    copy_posteriors, loglike_diff = convergence_analysis.metastability_error_analysis(thresh_loglike_diff=threshold_loglike_diff,
+                                                                                      autocor_slice=autocor_slice,
                                                                                       max_iterations=max_iterations)
     norm_copy_num = convergence_analysis.norm_copy_num
     logging.info('Evaluating with normal copy number: {}'.format(norm_copy_num))
