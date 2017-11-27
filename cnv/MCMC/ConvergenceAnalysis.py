@@ -209,8 +209,12 @@ class ConvergenceAnalysis(object):
         while loglike_diff < thresh_loglike_diff:
             logging.info('Run {}; trying {} iterations; latest loglike_diff: {}'.format(tries, self.n_iterations, loglike_diff))
             if tries > max_tries:
-                raise RuntimeError('Metastability error: unable to converge at copy number state with '
-                                   'greater likelihood than normal ploidy state')
+                # log as error and return to continue analysis
+                logging.error('Metastability error: unable to converge at copy number state with '
+                              'greater likelihood than normal ploidy state')
+                return copy_posteriors, loglike_diff
+                # raise RuntimeError('Metastability error: unable to converge at copy number state with '
+                #                    'greater likelihood than normal ploidy state')
             # check if metastability error in this chain after increasing n_iterations
             if tries > 0:
                 self.ploidy_model.initStates()
