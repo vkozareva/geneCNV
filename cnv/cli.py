@@ -234,7 +234,10 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
 
     reporting_df[['num_targets', 'start', 'end', 'ploidy']] = reporting_df[['num_targets', 'start',
                                                                             'end', 'ploidy']].applymap(int)
-    reporting_df.to_csv('{}_summary.txt'.format(outputPrefix), sep='\t')
+
+    with open('{}_summary.txt'.format(outputPrefix), 'w') as outfile_main:
+        ## outfile_main.write('###### Metadata here\n')
+        reporting_df.to_csv(outfile_main, index=False, sep='\t')
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
