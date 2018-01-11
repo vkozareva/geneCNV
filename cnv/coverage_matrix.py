@@ -188,7 +188,7 @@ class CoverageMatrix(object):
         logging.info('\nCreating coverage_matrix with {} files'.format(file_count))
         coverage_matrix = []
         for bamfile_path in bamfile_paths:
-            logging.info("Getting coverage for " + bamfile_path)
+            logging.info('Getting coverage for {}'.format(bamfile_path))
             with WrappedBAM(bamfile_path) as bamfile:
                 # collect meta-data
                 bam_info = [bamfile.read_groups.sample,
