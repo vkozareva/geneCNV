@@ -6,4 +6,4 @@ numpy==1.13.3
 pandas==0.20.3
 pybedtools
 pysam==0.10.0
-scipy==0.18.0
+scipy==0.19.1
