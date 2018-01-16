@@ -37,7 +37,7 @@ class Target(object):
         assert other.chrom == self.chrom
         s = min(self.start, other.start)
         e = max(self.end, other.end)
-        mergedString = "Merged-"
+        mergedString = "MergedBaseline-" if "Baseline" in self.label or "Baseline" in other.label else "Merged-"
         if self.label.count(mergedString) > 0 or other.label.count(mergedString) > 0:
             new_name = mergedString + str(s) + ":" + str(e)
         else:
