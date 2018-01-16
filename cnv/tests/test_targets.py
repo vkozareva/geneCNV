@@ -9,10 +9,12 @@ class TargetTests(unittest.TestCase):
         rs = [Target("C", 50, 100),
               Target("A", 75, 100),
               Target("A", 75, 150),
-              Target("A", 80, 90)]
+              Target("A", 80, 90),
+              Target("2", 100, 120),
+              Target("11", 100, 120)]
         old = list(rs)
         rs.sort()
-        order = [2, 1, 3, 0]
+        order = [4, 5, 2, 1, 3, 0]
         for idx, o in enumerate(order):
             self.assertEquals(rs[idx].start, old[o].start, "Start value was off")
             self.assertEquals(rs[idx].end, old[o].end, "End value was off")
