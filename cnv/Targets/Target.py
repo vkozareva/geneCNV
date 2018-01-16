@@ -48,9 +48,12 @@ class Target(object):
         """Orders by chrom, start, then largest length first
         Baseline targets will always be second"""
         assert isinstance(other, Target)
+        # for easier chrom comparison
+        convert = lambda chrom: int(chrom) if chrom.isdigit() else chrom
+
         base_comp = cmp('Baseline' in self.label, 'Baseline' in other.label)
         if base_comp == 0:
-            chrom_comp = cmp(self.chrom, other.chrom)
+            chrom_comp = cmp(convert(self.chrom), convert(other.chrom))
             if chrom_comp == 0:
                 start_cmp = cmp(self.start, other.start)
                 if start_cmp == 0:
