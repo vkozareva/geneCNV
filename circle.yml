@@ -69,9 +69,9 @@ jobs:
             # Create a data volume for remote docker environment.
             docker create -v /data --name data alpine:3.4 /bin/true
             docker cp tmp data:/data/.
-            docker cp notebooks data:/data/.
-            docker run --volumes-from data "genecnv:${image_tag}" genecnv create-bams /data/notebooks/DMD_targets.bed /data/tmp/
-            docker run --volumes-from data "genecnv:${image_tag}" genecnv create-matrix /data/notebooks/DMD_targets.bed /data/tmp/files.fofn --outputFile /data/tmp/matrix.csv --targetArgfile /data/tmp/targs.p
+            docker cp test_data data:/data/.
+            docker run --volumes-from data "genecnv:${image_tag}" genecnv create-bams /data/test_data/DMD_targets.bed /data/tmp/
+            docker run --volumes-from data "genecnv:${image_tag}" genecnv create-matrix /data/test_data/DMD_targets.bed /data/tmp/files.fofn --outputFile /data/tmp/matrix.csv --targetArgfile /data/tmp/targs.p
             docker run --volumes-from data "genecnv:${image_tag}" genecnv train-model --tol 0.001 /data/tmp/targs.p /data/tmp/matrix.csv /data/tmp/train.out
             docker run --volumes-from data "genecnv:${image_tag}" genecnv evaluate-sample --no_gelman_rubin --n_iterations 200 --use_single_process /data/tmp/_bam_1.bam /data/tmp/train.out /data/tmp/results
 
