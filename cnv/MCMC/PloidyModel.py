@@ -64,7 +64,8 @@ class PloidyModel(object):
 
             # Log some convergence info at decile intervals.
             if (i + 1) % (n_iterations / 10) == 0:
-                logging.info('After {} iterations:\ncnv: {}\nlikelihood: {}\n'.format(
+                logging.info('Completed {} iterations'.format(i + 1))
+                logging.debug('After {} iterations:\ncnv: {}\nlikelihood: {}\n'.format(
                     i + 1, self.ploidy, self.likelihoods[i]))
 
         # Log acceptance ratio at end

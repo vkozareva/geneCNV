@@ -18,6 +18,11 @@ from cnv.utilities import SimulateData
 from coverage_matrix import CoverageMatrix
 from hln_parameters import HLN_Parameters
 
+def configure_logging(verbose=0):
+    """ Configure logging and verbosity """
+    level = logging.DEBUG if verbose == 2 else logging.INFO if verbose == 1 else logging.WARNING
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
+                        datefmt='%m/%d/%Y %I:%M:%S %p', level=level)
 
 @command('version')
 def version():
@@ -27,7 +32,8 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=None, unwanted_filters=None, min_dist=DEFAULT_MERGE_DISTANCE):
+def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=None, unwanted_filters=None,
+                  min_dist=DEFAULT_MERGE_DISTANCE, verbose=0):
     """ Create coverage_matrix from given bamfilesFofn.
 
     :param targetsBedfile: Source of targets, and that may include baseline intervals
@@ -39,11 +45,14 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
+    :param -v, --verbose: 0 - Logging level warning; 1 - Logging level info; 2 - Logging level debug [0]
 
     Valid filter names: unmapped, MAPQ_below_60, PCR_duplicate, mate_is_unmapped, not_proper_pair, tandem_pair,
                         negative_insert_length, insert_length_greater_than_merge_distance, pair_end_less_than_reference_end
 
     """
+    # set appropriate logging level
+    configure_logging(verbose)
 
     if bamfilesFofn.endswith('.bam'):
         bamfilesFofn = bamfilesFofn.split(',')
@@ -74,7 +83,7 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
 @command('evaluate-sample')
 def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
                     exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
-                    threshold_loglike_diff=-30, norm_cutoff=0.5):
+                    threshold_loglike_diff=-30, norm_cutoff=0.5, verbose=0):
     """Test for copy number variation in a given sample
 
     :param subjectFilePath: Path to subject bam (.bam.bai must be in same directory) or coverage count matrix
@@ -99,8 +108,12 @@ def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=
                                    with normal ploidy state [-30]
     :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below
                         which targets are flagged [0.5]
+    :param -v, --verbose: 0 - Logging level warning; 1 - Logging level info; 2 - Logging level debug [0]
 
     """
+    # set appropriate logging level
+    configure_logging(verbose)
+
     logging.info("Running evaluate samples")
 
     # Read the parameters file.
@@ -249,7 +262,7 @@ def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
-                fit_diag_only=False):
+                fit_diag_only=False, verbose=0):
     """Train a model that detects copy number variation.
 
     :param targetsFile: Pickled file containing target intervals and CoverageMatrix arguments
@@ -257,10 +270,13 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     :param outputFile: Output file name, returns CoverageMatrix arguments, and HLN_Parameters object in pickled dict
     :param use_baseline_sum: Train on sum of baseline targets, instead of each baseline target individually, will return error if
                              no baseline targets found
-    :param max_iterations: Maximum number of iterations to use during EM routine before termination
-    :param tol: Tolerance for convergence at which to terminate during EM routine
+    :param max_iterations: Maximum number of iterations to use during EM routine before termination [150]
+    :param tol: Tolerance for convergence at which to terminate during EM routine [1e-8]
     :param fit_diag_only: Returns diagonal matrix after fitting only variances (all off-diag 0)
+    :param -v, --verbose: 0 - Logging level warning; 1 - Logging level info; 2 - Logging level debug [0]
     """
+    # set appropriate logging level
+    configure_logging(verbose)
     logging.info("Running sample training.")
     if fit_diag_only:
         logging.info('Fitting only diagonal variance terms.')
