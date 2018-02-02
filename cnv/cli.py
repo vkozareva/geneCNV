@@ -72,28 +72,33 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
+def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
                     exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
                     threshold_loglike_diff=-30, norm_cutoff=0.5):
     """Test for copy number variation in a given sample
 
-    :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
+    :param subjectFilePath: Path to subject bam (.bam.bai must be in same directory) or coverage count matrix
+                            (in csv format) (targets must match those in parametersFile)
     :param parametersFile: Pickled file containing a dict with CoverageMatrix arguments and
                            instance of HLN_Parameters (mu, covariance, targets)
-    :param outputPrefix: Output file name without extension -- generates two output files (one .txt file of posteriors
-                       and one .pdf displaying stacked bar chart)
-    :param n_iterations: The number of MCMC iterations desired (should be divisible by 100)
-    :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period (should be divisible by 0.05)
+    :param outputPrefix: Output file name without extension -- generates three output files (.txt
+                        file of posteriors, _summary.txt, and .pdf with stacked bar chart)
+    :param n_iterations: The number of MCMC iterations desired (should be divisible by 100) [10000]
+    :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period
+                         (should be divisible by 0.05) [0.3]
     :param autocor_slice: The autocorrelation slice coefficient to use when reporting posterior probabilities
-                          ie. only every 50th iteration will be kept
-    :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
-    :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
+                          ie. only every 50th iteration will be kept [50]
+    :param exclude_covar: Exclude covariance estimates in calculations of conditional and joint probabilities
+    :param no_gelman_rubin: Will not perform Gelman-Rubin convergence analysis before metastability analysis
     :param num_chains: Number of independent chains to use during G-R analysis, will use separate process for each unless
-                       specified
-    :param use_single_process: Will not use multiprocessing during G-R analysis
+                       --use_single_process specified [4]
+    :param use_single_process: Will not use parallelization during G-R analysis
     :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
-    :param threshold_loglike_diff: Threshold for calling metastability error in log-likelihood comparison with normal ploidy state
-    :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
+                           [25000]
+    :param threshold_loglike_diff: Threshold for calling metastability error in log-likelihood comparison
+                                   with normal ploidy state [-30]
+    :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below
+                        which targets are flagged [0.5]
 
     """
     logging.info("Running evaluate samples")
@@ -103,8 +108,11 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
     full_targets = targets_params['full_targets']
     targets_to_test = targets_params['parameters'].targets
 
-    # Parse subject bamfile
-    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectBamfilePath], full_targets)
+    # Parse subject file
+    if subjectFilePath.endswith('.csv'):
+        subject_df = pd.read_csv(subjectFilePath, index_col=0)
+    else:
+        subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subject_bamfiles], full_targets)
     subject_id = subject_df['sample'][0]
     target_columns = [target.label for target in targets_to_test]
     subject_data = subject_df[target_columns].values.astype('float').flatten()
@@ -251,7 +259,7 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
                              no baseline targets found
     :param max_iterations: Maximum number of iterations to use during EM routine before termination
     :param tol: Tolerance for convergence at which to terminate during EM routine
-    :param fit_diag_only: if True, will return diagonal matrix after fitting only variances (all off-diag 0)
+    :param fit_diag_only: Returns diagonal matrix after fitting only variances (all off-diag 0)
     """
     logging.info("Running sample training.")
     if fit_diag_only:
