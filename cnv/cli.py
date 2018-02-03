@@ -128,7 +128,7 @@ def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=
         subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subject_bamfiles], full_targets)
     subject_id = subject_df['sample'][0]
     target_columns = [target.label for target in targets_to_test]
-    subject_data = subject_df[target_columns].values.astype('float').flatten()
+    subject_data = subject_df.iloc[0][target_columns].values.astype('float').flatten()
 
     # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
     cnv_support = np.array([1e-10, 1, 2, 3]).astype(float)
