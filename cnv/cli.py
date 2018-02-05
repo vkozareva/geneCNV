@@ -32,13 +32,13 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=None, unwanted_filters=None,
+def create_matrix(targetsBedfile, bamfilesFofn, outputFile, targetArgfile=None, unwanted_filters=None,
                   min_dist=DEFAULT_MERGE_DISTANCE, verbose=0):
     """ Create coverage_matrix from given bamfilesFofn.
 
     :param targetsBedfile: Source of targets, and that may include baseline intervals
     :param bamfilesFofn: File containing the paths to all BAM files to be included in the coverage_matrix
-    :param outputFile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
+    :param outputFile: The path to a csv output file to create from the coverage_matrix.
     :param targetArgfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
@@ -57,11 +57,7 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
     if bamfilesFofn.endswith('.bam'):
         bamfilesFofn = bamfilesFofn.split(',')
 
-    if targetsBedfile:
-        targets = TargetCollection.load_from_txt_file(targetsBedfile, min_merge_dist=min_dist)
-    else:
-        logging.error("--targetsBedfile must be specified.")
-        sys.exit(1)
+    targets = TargetCollection.load_from_txt_file(targetsBedfile, min_merge_dist=min_dist)
 
     if unwanted_filters is not None:
         unwanted_filters = unwanted_filters.split(',')
@@ -75,9 +71,9 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
 
     matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfilesFofn, targets)
-    if outputFile:
-        coverage_matrix_df.to_csv(outputFile)
-        print 'Finished creating {}'.format(outputFile)
+
+    coverage_matrix_df.to_csv(outputFile)
+    logging.info('Finished creating {}'.format(outputFile))
 
 
 @command('evaluate-sample')
@@ -125,7 +121,7 @@ def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=
     if subjectFilePath.endswith('.csv'):
         subject_df = pd.read_csv(subjectFilePath, index_col=0)
     else:
-        subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subject_bamfiles], full_targets)
+        subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectFilePath], full_targets)
     subject_id = subject_df['sample'][0]
     target_columns = [target.label for target in targets_to_test]
     subject_data = subject_df.iloc[0][target_columns].values.astype('float').flatten()
