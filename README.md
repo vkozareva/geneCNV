@@ -14,8 +14,16 @@ This repository is divided into several main sections.
 Read the full documentation at [http://genecnv.readthedocs.io](http://genecnv.readthedocs.io).
 
 ## Installation
+The recommended way to download and install geneCNV is:
+~~~bash
+git clone https://github.com/GenePeeks/geneCNV.git
+cd geneCNV
+pip install -r requirements.txt
+python setup.py install
+~~~
 
-GeneCNV runs on Python 2.7, which you can install for your OS [here](https://wiki.python.org/moin/BeginnersGuide/Download).
+If you don't already have Python 2.7, you can install
+it for your OS [here](https://wiki.python.org/moin/BeginnersGuide/Download).
 
 ### Dependencies
 The package also requires the following Python dependencies, which you can install via `pip`.
@@ -27,14 +35,8 @@ The package also requires the following Python dependencies, which you can insta
 * [pysam](http://github.com/pysam-developers/pysam)
 * [SciPy](http://www.scipy.org/)
 
-
-To download and install geneCNV (along with any unsatisfied dependencies):
-~~~bash
-git clone https://github.com/GenePeeks/geneCNV.git
-cd geneCNV
-pip install -r requirements.txt
-python setup.py install
-~~~
+Note that some of these packages have their own non-Python dependencies, including
+several in C.
 
 ### Running Tests
 Make sure you've installed properly by running unit tests as follows:
@@ -45,7 +47,7 @@ Make sure you've installed properly by running unit tests as follows:
 The tests may take a few minutes to complete successfully.
 
 ## Command Line Interface Introduction
-GeneCNV involves three main commands: `create-matrix`, `train-model`, and
+GeneCNV involves three main sub-commands: `create-matrix`, `train-model`, and
 `evaluate-sample`, corresponding to the following main steps in the
 computational pipeline.
 
