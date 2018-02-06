@@ -1,17 +1,21 @@
-.. geneCNV documentation master file, created by
-   sphinx-quickstart on Thu Sep 14 15:19:34 2017.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 geneCNV: germline copy number analysis for targeted exome sequencing
 ====================================================================
 
-GeneCNV is a command-line software package and Python library designed to use targeted
-sequencing data to identify copy number across targets.
+GeneCNV is a command-line software package and Python library designed to use
+short-read targeted sequencing data to identify copy number across targets.
+It is intended for analysis across a subset of genes using parameters derived
+from a predefined set of reference (normal) samples.
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+
+    introduction
+
+.. toctree::
+    :maxdepth: 2
+
+    commands
+
 
 
 

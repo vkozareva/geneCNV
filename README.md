@@ -44,9 +44,10 @@ Make sure you've installed properly by running unit tests as follows:
 ~~~
 The tests may take a few minutes to complete successfully.
 
-## Command Line Interface Tutorial
+## Command Line Interface Introduction
 GeneCNV involves three main commands: `create-matrix`, `train-model`, and
-`evaluate-sample`.
+`evaluate-sample`, corresponding to the following main steps in the
+computational pipeline.
 
 ### Get coverage counts
 To get started, generate coverage counts across relevant targets
@@ -57,7 +58,9 @@ X   32867834    32867947    Ex3 DMD
 X   33038245    33038327    Ex2 DMD
 X   33229388    33229673    Ex1 DMD
 ```
-An example BED file for the DMD gene is provided in `test_data`.
+An example BED file for the DMD gene is provided in `test_data`. Note that the first
+four fields (chromosome, start position, end position, label) are required,
+while the fifth is optional.
 
 You must also provide a text file of paths to the sample BAM files in this format:
 ```
@@ -67,10 +70,10 @@ You must also provide a text file of paths to the sample BAM files in this forma
 An example `create-matrix` command looks like:
 ~~~bash
 genecnv create-matrix test_data/example_dmd_baseline.bed training_samples.fofn \
---outputFile training_sample_coverage.csv --targetArgfile dmd_baseline_targets.pickle
+training_sample_coverage.csv --targetArgfile dmd_baseline_targets.pickle
 ~~~
-Output CSVs and serialized target/argument files can be optionally produced.
-You only need to produce a target/argument file once for a specific set of targets.
+Serialized target/argument files can be optionally produced with this command, and
+you only need to produce a target/argument file once for a specific set of targets.
 An example output CSV for this command is provided in `test_data`. This can be
 used to run the subsequent `train-model` command.
 
