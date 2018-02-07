@@ -134,7 +134,7 @@ def hln_EM(Y, max_iterations=25, tol=1e-6, fit_diag_only=False):
 
         change = np.amax([np.amax(np.absolute(mu - oldmu)), np.amax(np.absolute(cov - oldcov))])
         iters += 1
-        logging.info('iteration: {}, change: {}'.format(iters, change))
+        logging.debug('iteration: {}, change: {}'.format(iters, change))
 
     return mu, cov
 

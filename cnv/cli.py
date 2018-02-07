@@ -18,6 +18,11 @@ from cnv.utilities import SimulateData
 from coverage_matrix import CoverageMatrix
 from hln_parameters import HLN_Parameters
 
+def configure_logging(verbose=0):
+    """ Configure logging and verbosity """
+    level = logging.DEBUG if verbose == 2 else logging.INFO if verbose == 1 else logging.WARNING
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
+                        datefmt='%m/%d/%Y %I:%M:%S %p', level=level)
 
 @command('version')
 def version():
@@ -27,32 +32,32 @@ def version():
     sys.exit()
 
 @command('create-matrix')
-def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=None, unwanted_filters=None, min_dist=DEFAULT_MERGE_DISTANCE):
+def create_matrix(targetsBedfile, bamfilesFofn, outputFile, targetArgfile=None, unwanted_filters=None,
+                  min_dist=DEFAULT_MERGE_DISTANCE, verbose=0):
     """ Create coverage_matrix from given bamfilesFofn.
 
     :param targetsBedfile: Source of targets, and that may include baseline intervals
     :param bamfilesFofn: File containing the paths to all BAM files to be included in the coverage_matrix
-    :param outputFile: The path to a csv output file to create from the coverage_matrix. If not provided, no output file will be created.
+    :param outputFile: The path to a csv output file to create from the coverage_matrix.
     :param targetArgfile: Path to an output file to contain pickled dict holding target intervals, unwanted_filters, and min_dist.
     :param wanted_gene: Gene from which to gather targets
     :param unwanted_filters: Comma separated list of filters on reads that should be skipped, keyed by the name of the filter
     :param min_dist: Any two intervals that are closer than this distance will be merged together,
         and any read pairs with insert lengths greater than this distance will be skipped. The default value of 629
         was derived to be one less than the separation between intervals for Exon 69 and Exon 70 of DMD.
+    :param -v, --verbose: 0 - Logging level warning; 1 - Logging level info; 2 - Logging level debug [0]
 
     Valid filter names: unmapped, MAPQ_below_60, PCR_duplicate, mate_is_unmapped, not_proper_pair, tandem_pair,
                         negative_insert_length, insert_length_greater_than_merge_distance, pair_end_less_than_reference_end
 
     """
+    # set appropriate logging level
+    configure_logging(verbose)
 
     if bamfilesFofn.endswith('.bam'):
         bamfilesFofn = bamfilesFofn.split(',')
 
-    if targetsBedfile:
-        targets = TargetCollection.load_from_txt_file(targetsBedfile, min_merge_dist=min_dist)
-    else:
-        logging.error("--targetsBedfile must be specified.")
-        sys.exit(1)
+    targets = TargetCollection.load_from_txt_file(targetsBedfile, min_merge_dist=min_dist)
 
     if unwanted_filters is not None:
         unwanted_filters = unwanted_filters.split(',')
@@ -66,36 +71,45 @@ def create_matrix(targetsBedfile, bamfilesFofn, outputFile=None, targetArgfile=N
 
     matrix_instance = CoverageMatrix(unwanted_filters=unwanted_filters)
     coverage_matrix_df = matrix_instance.create_coverage_matrix(bamfilesFofn, targets)
-    if outputFile:
-        coverage_matrix_df.to_csv(outputFile)
-        print 'Finished creating {}'.format(outputFile)
+
+    coverage_matrix_df.to_csv(outputFile)
+    logging.info('Finished creating {}'.format(outputFile))
 
 
 @command('evaluate-sample')
-def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
+def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=10000, burn_in_prop=0.3, autocor_slice=50,
                     exclude_covar=False, no_gelman_rubin=False, num_chains=4, use_single_process=False, max_iterations=25000,
-                    threshold_loglike_diff=-30, norm_cutoff=0.5):
+                    threshold_loglike_diff=-30, norm_cutoff=0.5, verbose=0):
     """Test for copy number variation in a given sample
 
-    :param subjectBamfilePath: Path to subject bamfile (.bam.bai must be in same directory)
+    :param subjectFilePath: Path to subject bam (.bam.bai must be in same directory) or coverage count matrix
+                            (in csv format) (targets must match those in parametersFile)
     :param parametersFile: Pickled file containing a dict with CoverageMatrix arguments and
                            instance of HLN_Parameters (mu, covariance, targets)
-    :param outputPrefix: Output file name without extension -- generates two output files (one .txt file of posteriors
-                       and one .pdf displaying stacked bar chart)
-    :param n_iterations: The number of MCMC iterations desired (should be divisible by 100)
-    :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period (should be divisible by 0.05)
+    :param outputPrefix: Output file name without extension -- generates three output files (.txt
+                        file of posteriors, _summary.txt, and .pdf with stacked bar chart)
+    :param n_iterations: The number of MCMC iterations desired (should be divisible by 100) [10000]
+    :param burn_in_prop: The proportion of MCMC iterations to exclude as part of burn-in period
+                         (should be divisible by 0.05) [0.3]
     :param autocor_slice: The autocorrelation slice coefficient to use when reporting posterior probabilities
-                          ie. only every 50th iteration will be kept
-    :param exclude_covar: If True, exclude covariance estimates in calculations of conditional and joint probabilities
-    :param no_gelman_rubin: Will not do Gelman-Rubin convergence analysis before metastability analysis
+                          ie. only every 50th iteration will be kept [50]
+    :param exclude_covar: Exclude covariance estimates in calculations of conditional and joint probabilities
+    :param no_gelman_rubin: Will not perform Gelman-Rubin convergence analysis before metastability analysis
     :param num_chains: Number of independent chains to use during G-R analysis, will use separate process for each unless
-                       specified
-    :param use_single_process: Will not use multiprocessing during G-R analysis
+                       --use_single_process specified [4]
+    :param use_single_process: Will not use parallelization during G-R analysis
     :param max_iterations: Maximum number of iterations to use during convergence analysis (both G-R and metastability)
-    :param threshold_loglike_diff: Threshold for calling metastability error in log-likelihood comparison with normal ploidy state
-    :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below which targets are flagged
+                           [25000]
+    :param threshold_loglike_diff: Threshold for calling metastability error in log-likelihood comparison
+                                   with normal ploidy state [-30]
+    :param norm_cutoff: The cutoff for posterior probability of the normal target copy number, below
+                        which targets are flagged [0.5]
+    :param -v, --verbose: 0 - Logging level warning; 1 - Logging level info; 2 - Logging level debug [0]
 
     """
+    # set appropriate logging level
+    configure_logging(verbose)
+
     logging.info("Running evaluate samples")
 
     # Read the parameters file.
@@ -103,11 +117,17 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
     full_targets = targets_params['full_targets']
     targets_to_test = targets_params['parameters'].targets
 
-    # Parse subject bamfile
-    subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectBamfilePath], full_targets)
+    # Parse subject file
+    if subjectFilePath.endswith('.csv'):
+        subject_df = pd.read_csv(subjectFilePath, index_col=0)
+    else:
+        subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectFilePath], full_targets)
     subject_id = subject_df['sample'][0]
+    if len(subject_df) > 1:
+        logging.warning('Multiple samples in provided CSV. Evaluating only first sample {}.'.format(subject_id))
     target_columns = [target.label for target in targets_to_test]
-    subject_data = subject_df[target_columns].values.astype('float').flatten()
+    # evaluate only first subject if multiple samples in provided CSV
+    subject_data = subject_df.iloc[0][target_columns].values.astype('float').flatten()
 
     # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
     cnv_support = np.array([1e-10, 1, 2, 3]).astype(float)
@@ -241,7 +261,7 @@ def evaluate_sample(subjectBamfilePath, parametersFile, outputPrefix, n_iteratio
 
 @command('train-model')
 def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=False, max_iterations=150, tol=1e-8,
-                fit_diag_only=False):
+                fit_diag_only=False, verbose=0):
     """Train a model that detects copy number variation.
 
     :param targetsFile: Pickled file containing target intervals and CoverageMatrix arguments
@@ -249,10 +269,13 @@ def train_model(targetsFile, coverageMatrixFile, outputFile, use_baseline_sum=Fa
     :param outputFile: Output file name, returns CoverageMatrix arguments, and HLN_Parameters object in pickled dict
     :param use_baseline_sum: Train on sum of baseline targets, instead of each baseline target individually, will return error if
                              no baseline targets found
-    :param max_iterations: Maximum number of iterations to use during EM routine before termination
-    :param tol: Tolerance for convergence at which to terminate during EM routine
-    :param fit_diag_only: if True, will return diagonal matrix after fitting only variances (all off-diag 0)
+    :param max_iterations: Maximum number of iterations to use during EM routine before termination [150]
+    :param tol: Tolerance for convergence at which to terminate during EM routine [1e-8]
+    :param fit_diag_only: Returns diagonal matrix after fitting only variances (all off-diag 0)
+    :param -v, --verbose: 0 - Logging level warning; 1 - Logging level info; 2 - Logging level debug [0]
     """
+    # set appropriate logging level
+    configure_logging(verbose)
     logging.info("Running sample training.")
     if fit_diag_only:
         logging.info('Fitting only diagonal variance terms.')
