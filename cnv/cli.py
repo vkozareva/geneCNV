@@ -123,7 +123,10 @@ def evaluate_sample(subjectFilePath, parametersFile, outputPrefix, n_iterations=
     else:
         subject_df = CoverageMatrix(unwanted_filters=targets_params['unwanted_filters']).create_coverage_matrix([subjectFilePath], full_targets)
     subject_id = subject_df['sample'][0]
+    if len(subject_df) > 1:
+        logging.warning('Multiple samples in provided CSV. Evaluating only first sample {}.'.format(subject_id))
     target_columns = [target.label for target in targets_to_test]
+    # evaluate only first subject if multiple samples in provided CSV
     subject_data = subject_df.iloc[0][target_columns].values.astype('float').flatten()
 
     # Note that having 0 in support causes problems in the joint probability calculation if off-target reads exist
