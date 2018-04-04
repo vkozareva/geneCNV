@@ -40,9 +40,9 @@ class ReadGroups(object):
             tag_vals = [re.sub("\-L[0-9]{3}", "", k) for k in tag_vals]
         tag_vals = set(tag_vals)
         if not tag_vals:
-            logging.info('File: {} missing RG info for tag  {}.  Using value {}  instead'.format(bam_file_name,
-                                                                                                 tag,
-                                                                                                 default))
+            logging.info('File: {} missing RG info for tag {}. Using value {} instead'.format(bam_file_name,
+                                                                                              tag,
+                                                                                              default))
             setattr(self, attr, default)
         elif len(tag_vals) == 1:
             setattr(self, attr, tag_vals.pop())
@@ -152,7 +152,7 @@ class CoverageMatrix(object):
             duplicate_read_pairs = {key: value for key, value in read_pairs.items() if value > 2}
             if duplicate_read_pairs:
                 self.logger.warning('For {}, the following read_pairs appeared more than twice within {}: {}'.format(
-                    bamfile.filename, target.label, duplicate_read_pairs))
+                    bamfile.fname, target.label, duplicate_read_pairs))
 
             # Count the number of unique read pairs as the amount of coverage for any target
             target_coverage = len(read_pairs)
